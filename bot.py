@@ -1,0 +1,538 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import logging
+import json
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, RegexHandler
+from telegram import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from functools import wraps
+from collections import OrderedDict
+import locale
+import time
+import _thread as thread
+import requests
+import re
+import os
+import pickle
+
+import datetime
+from report import Doch1_Report
+
+
+
+"""
+#Hova
+01::נמצא ביחידה
+	01:נוכח
+02::מחוץ ליחידה
+	05:בתפקיד מחוץ ליחידה
+	25:כוננות
+	09:אחרי תורנות \ משמרת
+	03:עובד משמרות
+	13:הפניה רפואית
+	08:יום סידורים-חייל בודד
+	16:משמרת ערב
+	19:נגרע ממתין לקליטה
+	02:אבט"ש
+	14:לימודים על סמך אישור
+	20:סבב קו
+	23:יום פרט
+03::מסופח ליחידה אחרת 
+	01:מסופח ליחידה אחרת
+04::חופשה שנתית 
+	01:חופשה שנתית
+	06:חג עדתי
+	11:אזכרה - קרבה ראשונה
+05::חופשת מחלה
+	01:חופשת מחלה (גימלים)
+	08:יום ד
+	16:שמירת הריון 
+06::בקורס \ בהכשרה
+	01:בקורס \ בהכשרה
+07::נעדר משרות שלא ברשות
+	01:נפקד
+	02:חשש לנפקדות
+	03:מחלה בנפקדות
+08::כלוא
+	04:עבודות שרות צבאיות
+	01:בבסיס כליאה מעצר
+	02:עצור בכלא אזרחי
+	03:מעצר בית
+09::מאושפז
+	01:מאושפז
+12::חופשה מיוחדת
+	04:חופשה מפקד מיוחדת בהכשרה ראשונית
+	07:מיוחדת ע"ח שנתית - חובה
+	08:חופשת ממתינים
+	02:מיוחדת ע"ח המערכת - חובה
+	03:אבל - חיילי חובה
+13::חו"ל
+	02:חו"ל בתפקיד
+	04:חו"ל במיוחדת
+	22:חו"ל דח"ש/חל"ת
+	27:חו"ל - מחלה
+	28:חו"ל בחופשה (חובה)
+17::בידוד
+	17:מחלה שנתית
+	18:בידוד ביחידה
+
+### Keva
+01::נמצא ביחידה
+	01:נוכח
+02::מחוץ ליחידה
+	05:בתפקיד מחוץ ליחידה
+	25:כוננות
+	09:אחרי תורנות \ משמרת
+	03:עובד משמרות
+	13:הפניה רפואית
+	16:משמרת ערב
+	19:נגרע ממתין לקליטה
+	02:אבט"ש
+	14:לימודים על סמך אישור
+	18:הצ"ח
+	20:סבב קו
+	15:השעייה בתפקיד
+	23:יום פרט
+03::מסופח ליחידה אחרת 
+	01:מסופח ליחידה אחרת
+04::חופשה שנתית 
+	01:חופשה שנתית
+	04:חופשת אבל - קבע
+	06:חג עדתי
+	10:חופשה ללא תשלום קצרה
+	11:אזכרה - קרבה ראשונה
+	13:חופשה צבורה
+05::חופשת מחלה
+	01:חופשת מחלה (גימלים)
+	02:מחלה עפ"י הצהרה
+	07:טיפול רפואי
+	03:מחלת ילד
+	04:מחלת הורה
+	16:שמירת הריון 
+	05:מחלת בן\בת זוג
+	09:מחלת ילד ממארת
+	10:מחלת בן זוג ממארת
+	11:הריון או לידת בת זוג
+	12:תרומת מח עצם / איברים
+	14:הורה לבעל מוגבלויות
+	15:מחלה בפציעה בתפקיד
+06::בקורס \ בהכשרה
+	01:בקורס \ בהכשרה
+07::נעדר משרות שלא ברשות
+	01:נפקד
+	02:חשש לנפקדות
+	03:מחלה בנפקדות
+08::כלוא
+	04:עבודות שרות צבאיות
+	01:בבסיס כליאה מעצר
+	02:עצור בכלא אזרחי
+	03:מעצר בית
+09::מאושפז
+	01:מאושפז
+12::חופשה מיוחדת
+	05:חופשה מיוחדת - קבע
+	06:חופשה מיוחדת - התמחות
+13::חו"ל
+	02:חו"ל בתפקיד
+	04:חו"ל במיוחדת
+	22:חו"ל דח"ש/חל"ת
+	27:חו"ל - מחלה
+	01:חו"ל בחופשה אנשי קבע
+17::בידוד
+	17:מחלה שנתית
+	18:בידוד ביחידה
+	19:ע"ח חופשה שנתית
+	20:עבודה מהבית
+20::חופשת לידה
+	01:חופשת לידה
+	05:חופשת לידה - חו"ל
+    """
+# Code: ['Description', 'Main code', 'Secondary code']
+possible_statuses = {
+    '01':['נמצא ביחידה נוכח', '01', '01'],
+    '02':['הגנש/אבטש', '02', '02'],
+    '03':['הפנייה רפואית', '02', '13'],
+    '04':['חופשה שנתית', '04', '01'],
+    '05':['חופשה צבורה - קבע', '04', '13'],
+    '06':['אזכרה (דרגה ראשונה)', '04', '11'],
+    '07':['גימלים (רופא)', '05', '01'],
+    '08':['יום ד\' (החלטת מפקד) - חובה', '05', '08'],
+    '09':['מחלה (הצהרה) - קבע', '05', '02'],
+    '10':['בקורס/הכשרה', '06', '01'],
+    '11':['חו"ל בתפקיד', '13', '02'],
+    '12':['חו"ל במיוחדת', '13', '04'],
+    '13':['חו"ל בחופשה - קבע', '13', '01'],
+    '14':['חו"ל בחופשה - חובה', '13', '28'],
+    '15':['יום סידורים חייל בודד', '02', '08'],
+    '16':['מסופח ליחידה אחרת', '03', '01'],
+    '17':['מיוחדת ע"ח המערכת - חובה', '12', '02'],
+    '18':['מיוחדת ע"ח חופשה שנתית - חובה', '12', '07'],
+    '19':['אבל - חובה', '12', '03'],
+    '20':['בידוד - מחלה שנתית', '17', '17'],
+    '21':['בידוד - ביחידה', '17', '18'],
+    '22':['בידוד - ע"ח חופשה שנתית - קבע', '17', '19'],
+}
+
+
+START_TIME = datetime.time(8, 0, 0)
+END_TIME = datetime.time(10, 30, 0)
+
+custom_keyboard = [[KeyboardButton('/send_today')], [KeyboardButton('/show_future_config')], [KeyboardButton('/toggle_auto_send'), KeyboardButton('/change_future_config')]]
+reply_markup = ReplyKeyboardMarkup(custom_keyboard)
+remove_markup = ReplyKeyboardRemove()
+
+user_config = {}
+future_dates = {}
+
+# Enable logging
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    level=logging.INFO)
+
+logger = logging.getLogger(__name__)
+
+def restricted(func):
+    @wraps(func)
+    def wrapped(updater, context, *args, **kwargs):
+        chat_id = updater.message.chat.id
+        if str(chat_id) != user_config['telegram_chat_id']:
+            print('Unauthorized access denied for chat {}.'.format(user_id))
+            updater.bot.send_message(chat_id=user_config['telegram_chat_id'], text='Unauthorized access denied for chat {}.'.format(user_id))
+            return
+        return func(updater, context, *args, **kwargs)
+    return wrapped
+
+def time_in_range(time, start, end):
+    """Return true if x is in the range [start, end]"""
+    return start.hour <= time.hour <= end.hour
+    
+def can_send_now():
+    now = datetime.datetime.now()
+    return time_in_range(now, START_TIME, END_TIME) and now.isoweekday() not in [5,6]
+
+def setup_one_identity_routine(*args):
+    updater = args[0]
+    while True:
+        delete_conf_cache_old_dates()
+        now = datetime.datetime.now()
+        # check if time to send doch 1, if yes do, if no, sleep
+        if can_send_now() and now.date() in conf_cache['send_dates']:
+            updater.bot.send_message(chat_id=user_config['telegram_chat_id'], text='Auto sending today\'s report: {date}'.format(date=now.date()))
+            print('שולח בצורה אוטומטית את הדוח של היום: {date}'.format(date=now.date()))
+            report = Doch1_Report(user_config)
+            updater.bot.send_message(chat_id=user_config['telegram_chat_id'], text='משיג רשימת חיילים')
+            res = report.login_and_get_soldiers()
+            if not res[0]:
+                updater.bot.send_message(chat_id=user_config['telegram_chat_id'], text=res[1])
+            res = send_report(report, res[1])
+            updater.bot.send_message(chat_id=user_config['telegram_chat_id'], text='Sent report:\n{report}'.format(report=res))
+        else:
+            print('Waiting for next time to report')
+        # calc time until 8:00 am and sleep
+        time_to_sleep = (datetime.timedelta(hours=24) - (now-now.replace(hour=START_TIME.hour, minute=START_TIME.minute, second=START_TIME.second))).total_seconds() % (24 * 3600)
+        print('Sleeping for {} hours'.format(time_to_sleep/60/60))
+        time.sleep(time_to_sleep)
+
+@restricted
+def unknown_command(updater, context):
+    updater.message.reply_text(text='לא הבנתי...', reply_markup=reply_markup)
+
+def error(update, context):
+    """Log Errors caused by Updates."""
+    logger.warning('Update "%s" caused error "%s"', update, context.error)
+
+def initialize_user_config(path='config.json'):
+    global user_config
+    
+    with open(path, 'rb') as f:
+        data = f.read()
+    
+    user_config = json.loads(data)
+    """
+    Todo: implement cookies cache file
+    
+    global cookies_cache
+    if os.path.exists(cookie_cache_path):
+        with open(cookie_cache_path, 'rb') as f:
+            cookies_cache = pickle.load(f)
+    """
+
+def initialize_conf_cache(conf_cache_path='conf.cache'):
+    global conf_cache
+    
+    if os.path.exists(conf_cache_path):
+        with open(conf_cache_path, 'rb') as f:
+            conf_cache = pickle.load(f)
+    else:
+        conf_cache={}
+        conf_cache['send_dates']=[]
+        conf_cache['send_confs']={}
+        write_to_conf_cache(conf_cache_path)
+
+def write_to_conf_cache(conf_cache_path='conf.cache'):
+    with open(conf_cache_path, 'wb') as f:
+        pickle.dump(conf_cache, f, protocol=pickle.HIGHEST_PROTOCOL)
+        
+def delete_conf_cache_old_dates():
+    to_delete = []
+    for date in conf_cache['send_confs']:
+        if date < datetime.datetime.today().date():
+            to_delete.append(date)
+    for date in to_delete:
+        del conf_cache['send_confs'][date]
+        
+    to_delete = []
+    for date in conf_cache['send_dates']:
+        if date < datetime.datetime.today().date():
+            to_delete.append(date)
+    for date in to_delete:
+        conf_cache['send_dates'].remove(date)
+    
+    write_to_conf_cache()
+
+@restricted
+def show_future_config_callback(updater, context):
+    """When the command /show_future_config is issued."""
+    if len(conf_cache['send_confs']) != 0:
+        if not 'soldiers_list' in context.user_data.keys():
+            updater.message.reply_text(text='משיג רשימת חיילים')
+            report = Doch1_Report(user_config)
+            res = report.login_and_get_soldiers()
+            if not res[0]:
+                updater.message.reply_text(text=res[1], reply_markup=reply_markup)
+                return
+            context.user_data['soldiers_list'] = res[1]
+            
+        soldiers = {}
+        for soldier in context.user_data['soldiers_list']:
+            soldiers[soldier['mi']] = soldier['firstName'] + ' ' + soldier['lastName']
+    
+    conf_cache['send_dates'].sort()
+    conf_cache['send_confs'] = OrderedDict(sorted(conf_cache['send_confs'].items()))
+    text='Future auto send dates:\n'
+    for date in conf_cache['send_dates']:
+        text += '  {date}\n'.format(date=date.strftime('%d.%m.%Y'))
+    text += '\nFuture configs:\n'    
+    for date in conf_cache['send_confs'].keys():
+        text += '  {date}:\n'.format(date=date.strftime('%d.%m.%Y'))
+        for key, val in conf_cache['send_confs'][date].items():
+            text += '    {key}: {val}\n'.format(key=soldiers[key], val=possible_statuses[val][0])
+
+    updater.message.reply_text(text=text)
+
+@restricted
+def send_today_report_callback(updater, context):
+    """When the command /send_today_report is issued."""
+    report = Doch1_Report(user_config)
+    if can_send_now():
+        updater.message.reply_text(text='משיג רשימת חיילים')
+        res = report.login_and_get_soldiers()
+        if not res[0]:
+           updater.message.reply_text(text=res[1], reply_markup=reply_markup)
+        context.user_data['soldiers_list'] = res[1]
+        updater.message.reply_text(text='שולח')
+        res = send_report(report, res[1])
+        updater.message.reply_text(text='Sent report:\n{report}'.format(report=res), reply_markup=reply_markup)
+    else:
+        updater.message.reply_text(text='לא יכול לשלוח עכשיו, רק בין ראשון-חמישי בין השעות {start}-{end}'.format(start=START_TIME.strftime("%H:%M"), end=END_TIME.strftime("%H:%M")))
+    delete_conf_cache_old_dates()
+    updater.message.reply_text(text='איך תרצה להמשיך?', reply_markup=reply_markup)
+
+@restricted
+def toggle_auto_send_callback(updater, context):
+    """When the command /toggle_auto_send is issued."""
+    updater.message.reply_text(text='באיזה תאריך? (פורמט dd.mm)', reply_markup=remove_markup)
+    context.user_data['waiting_for_auto_send_in_date'] = True
+    
+@restricted
+def change_future_config_callback(updater, context):
+    """When the command /change_future_config is issued."""
+    updater.message.reply_text(text='באיזה תאריך? (פורמט dd.mm)', reply_markup=remove_markup)
+    context.user_data['waiting_for_change_future_config'] = True
+
+@restricted
+def set_date_callback(updater, context):
+    """When choosing a date for /toggle_auto_send or /change_future_config."""   
+    # If wrong input relative to the conversation
+    if ('waiting_for_auto_send_in_date' not in context.user_data.keys() or not context.user_data['waiting_for_auto_send_in_date']) and ('waiting_for_change_future_config' not in context.user_data.keys() or not context.user_data['waiting_for_change_future_config']):
+        updater.message.reply_text(text='לא הקלט שציפיתי אליו.. נסה שוב', reply_markup=reply_markup)
+        return
+
+    try:
+        # Parse date to nearest date based on day and month (round year upwards)
+        date = datetime.datetime.strptime(updater.message.text, '%d.%m').replace(year=datetime.datetime.today().year)
+        if date.date() < datetime.datetime.today().date(): # Change next year
+            date = date.replace(year=datetime.datetime.today().year+1)
+        date = date.date()
+    except Exception as e:
+        updater.message.reply_text(text='Can\'t parse date {}.'.format(str(e)), reply_markup=reply_markup)
+        return
+        
+    if 'waiting_for_auto_send_in_date' in context.user_data.keys() and context.user_data['waiting_for_auto_send_in_date']:
+        # Add or cancel automatic sending in specific day
+        context.user_data['waiting_for_auto_send_in_date'] = False
+        if date in conf_cache['send_dates']:
+            updater.message.reply_text(text='מבטל את השליחה האוטומטית בתאריך {}'.format(date.strftime('%d.%m.%Y')))
+            conf_cache['send_dates'].remove(date)
+        else:
+            updater.message.reply_text(text='מוסיף שליחה אוטומטית בתאריך {}'.format(date.strftime('%d.%m.%Y')))
+            conf_cache['send_dates'].append(date)
+        updater.message.reply_text(text='איך תרצה להמשיך?', reply_markup=reply_markup)
+        write_to_conf_cache()
+        
+    elif 'waiting_for_change_future_config' in context.user_data.keys() and context.user_data['waiting_for_change_future_config']:
+        # Change soldier's status in specific date
+        context.user_data['waiting_for_change_future_config'] = False
+        if not 'soldiers_list' in context.user_data.keys():
+            updater.message.reply_text(text='משיג רשימת חיילים')
+            report = Doch1_Report(user_config)
+            res = report.login_and_get_soldiers()
+            if not res[0]:
+                updater.message.reply_text(text=res[1], reply_markup=reply_markup)
+                return
+            context.user_data['soldiers_list'] = res[1]
+        soldiers_chunks = divide_list_to_chunks(context.user_data['soldiers_list'], round(len(context.user_data['soldiers_list'])/2))
+        keyboard_temp = [[KeyboardButton(soldier['firstName']+' '+soldier['lastName']) for soldier in soldier_group] for soldier_group in soldiers_chunks]
+        temp_markup = ReplyKeyboardMarkup(keyboard_temp)
+        updater.message.reply_text(text='איזה חייל תרצה לשנות?', reply_markup=temp_markup)
+        context.user_data['waiting_for_soldier_name'] = True
+        context.user_data['change_future_config_date'] = date
+
+@restricted
+def soldier_name_callback(updater, context):
+    """When sending soldiers name"""    
+    if not 'waiting_for_soldier_name' in context.user_data.keys() or not context.user_data['waiting_for_soldier_name']:
+        updater.message.reply_text(text='נתת לי פקודה לא מתאימה.. נסה שוב', reply_markup=reply_markup)
+        return
+    
+    context.user_data['waiting_for_soldier_name'] = False
+    context.user_data['waiting_for_soldier_change_status'] = False
+    context.user_data['waiting_for_change_future_config'] = False
+    context.user_data['waiting_for_auto_send_in_date'] = False
+    
+    soldier_to_change = None
+    # Finding soldier by name
+    for soldier in context.user_data['soldiers_list']:
+        if updater.message.text == soldier['firstName']+' '+soldier['lastName']:
+            soldier_to_change = soldier['mi']
+    if not soldier_to_change:
+        updater.message.reply_text(text='לא מצאתי את החייל..', reply_markup=reply_markup)
+        return
+        
+    context.user_data['waiting_for_soldier_change_status'] = True
+    context.user_data['change_future_config_soldier_to_change'] = soldier_to_change
+    context.user_data['change_future_config_soldier_to_change_name'] = updater.message.text
+    
+    statuses_description = '\n'.join(["{status_id} - {desc}".format(status_id=status_id, desc=status_info[0]) for status_id, status_info in possible_statuses.items()])
+    updater.message.reply_text(text='בחר את האפשרות:\n{statuses_description}'.format(statuses_description=statuses_description), reply_markup=remove_markup)
+        
+@restricted
+def soldier_change_status_callback(updater, context):
+    """When sending status for a soldier in specific date"""    
+    if not 'waiting_for_soldier_change_status' in context.user_data.keys() or not context.user_data['waiting_for_soldier_change_status']:
+        updater.message.reply_text(text='נתת לי פקודה לא מתאימה.. נסה שוב', reply_markup=reply_markup)
+        return
+    
+    context.user_data['waiting_for_soldier_name'] = False
+    context.user_data['waiting_for_soldier_change_status'] = False
+    context.user_data['waiting_for_change_future_config'] = False
+    context.user_data['waiting_for_auto_send_in_date'] = False
+        
+    status_code = updater.message.text.zfill(2)
+
+    soldier_to_change = context.user_data['change_future_config_soldier_to_change'] 
+    soldier_to_change_name = context.user_data['change_future_config_soldier_to_change_name']
+    date_to_change = context.user_data['change_future_config_date']
+
+    context.user_data['change_future_config_soldier_to_change'] = None
+    context.user_data['change_future_config_soldier_to_change_name'] = None
+    context.user_data['change_future_config_date'] = None
+    
+    # No such status
+    if not status_code in possible_statuses.keys():
+        updater.message.reply_text(text='אין סטטוס כזה, נסה שנית', reply_markup=reply_markup)
+        return
+    
+    # Date does not exist yet in conf_cache['send_confs']
+    if not date_to_change in conf_cache['send_confs'].keys():
+        conf_cache['send_confs'][date_to_change] = {}
+    
+    # If status is 01 then delete it (default), else add it
+    if status_code == '01' and soldier_to_change in conf_cache['send_confs'][date_to_change].keys():
+        del conf_cache['send_confs'][date_to_change][soldier_to_change]
+    elif status_code != '01':
+        conf_cache['send_confs'][date_to_change][soldier_to_change] = status_code
+        
+    # if conf_cache['send_confs'][date_to_change] is empty, delete it from the dates list
+    if len(conf_cache['send_confs'][date_to_change]) == 0:
+        del conf_cache['send_confs'][date_to_change]
+        
+    write_to_conf_cache()
+    updater.message.reply_text(text='שיניתי בתאריך {date} את הסטטוס של {soldier} ל{status}'.format(date=date_to_change, soldier=soldier_to_change_name, status=possible_statuses[status_code][0]), reply_markup=reply_markup)
+    
+
+def divide_list_to_chunks(original_list, size):
+    for i in range(0, len(original_list), size): 
+        yield original_list[i:i + size]
+
+ 
+def send_report(report, soldiers_list):
+    pre_placements = None
+    todays_placement = conf_cache['send_confs'][datetime.datetime.today().date()] if datetime.datetime.today().date() in conf_cache['send_confs'] else None
+    if todays_placement:
+        pre_placements = {}
+        for soldier_id, status_code in todays_placement.items():
+            pre_placements[soldier_id] = {}
+            pre_placements[soldier_id]['mainStatusCode'] = possible_statuses[status_code][1]
+            pre_placements[soldier_id]['secondaryStatusCode'] = possible_statuses[status_code][2]
+            #TODO: add option to send note on 'Outside base' status
+            #pre_placements[soldier_id]['note'] = 
+    return report.do_report_and_get_statuses(soldiers_list, pre_placements)
+
+
+def main():
+    # load user configuration file
+    initialize_user_config()
+    
+    initialize_conf_cache()
+    
+    """Start the bot."""
+    # Create the Updater and pass it your bot's token.
+    # Make sure to set use_context=True to use the new context based callbacks
+    # Post version 12 this will no longer be necessary
+    updater = Updater(user_config['telegram_api_key'], use_context=True)
+
+    # Get the dispatcher to register handlers
+    dp = updater.dispatcher
+    
+    dp.add_handler(CommandHandler('send_today', send_today_report_callback))
+    dp.add_handler(CommandHandler('toggle_auto_send', toggle_auto_send_callback))
+    dp.add_handler(CommandHandler('change_future_config', change_future_config_callback))
+    dp.add_handler(CommandHandler('show_future_config', show_future_config_callback))
+    dp.add_handler(MessageHandler(Filters.regex(r'^[0-9]{1,2}\.[0-9]{1,2}$'), set_date_callback))
+    dp.add_handler(MessageHandler(Filters.regex(r'^[\u0590-\u05fe\s\']+$'), soldier_name_callback)) # Hebrew regex + space + '
+    dp.add_handler(MessageHandler(Filters.regex(r'^[0-9]{1,2}$'), soldier_change_status_callback))
+    
+    # log all errors
+    dp.add_error_handler(error)
+    
+    updater.bot.send_message(chat_id=user_config['telegram_chat_id'], text='מה תרצה לעשות?', reply_markup=reply_markup)
+
+    # Start the Bot
+    updater.start_polling()
+    
+    # start new thread for daily notifications
+    args = (updater,)
+    #thread.start_new_thread(setup_daily_reminder, args)
+    thread.start_new_thread(setup_one_identity_routine, args)
+
+    # Run the bot until you press Ctrl-C or the process receives SIGINT,
+    # SIGTERM or SIGABRT. This should be used most of the time, since
+    # start_polling() is non-blocking and will stop the bot gracefully.
+    updater.idle()
+
+
+if __name__ == '__main__':
+    # Make locale understand commas is number parsing!
+    # See https://stackoverflow.com/questions/2953746/python-parse-comma-separated-number-into-int.
+    locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+    main()
