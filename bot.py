@@ -291,19 +291,22 @@ def delete_conf_cache_old_dates():
     
     write_to_conf_cache()
 
+def update_soldiers_list(updater, context):
+    updater.message.reply_text(text='משיג רשימת חיילים')
+    report = Doch1_Report(user_config)
+    res = report.login_and_get_soldiers()
+    if not res[0]:
+        updater.message.reply_text(text=res[1], reply_markup=reply_markup)
+        return
+    context.user_data['soldiers_list'] = res[1]
+
 @restricted
 def show_future_config_callback(updater, context):
     """When the command /show_future_config is issued."""
     if len(conf_cache['send_confs']) != 0 or len(conf_cache['default_configs']) != 0:
-        if not 'soldiers_list' in context.user_data.keys():
-            updater.message.reply_text(text='משיג רשימת חיילים')
-            report = Doch1_Report(user_config)
-            res = report.login_and_get_soldiers()
-            if not res[0]:
-                updater.message.reply_text(text=res[1], reply_markup=reply_markup)
-                return
-            context.user_data['soldiers_list'] = res[1]
-            
+        if not 'soldiers_list' in context.user_data:
+            update_soldiers_list(updater, context)
+
         soldiers = {}
         for soldier in context.user_data['soldiers_list']:
             soldiers[soldier['mi']] = soldier['firstName'] + ' ' + soldier['lastName']
@@ -417,10 +420,21 @@ def toggle_auto_send_by_date_callback(updater, context):
 @restricted
 def change_future_config_callback(updater, context):
     """When the command /change_future_config is issued."""
-    keyboard_temp = [[KeyboardButton('Change default')], [KeyboardButton('X')]]
+    keyboard_temp = [[KeyboardButton('Next morning')], [KeyboardButton('Change default')], [KeyboardButton('X')]]
     temp_markup = ReplyKeyboardMarkup(keyboard_temp)
     updater.message.reply_text(text='באיזה תאריך? (פורמט dd.mm)', reply_markup=temp_markup)
     return DATE_SELECT      
+
+@restricted
+def change_next_morning_config_callback(updater, context):
+    now = datetime.datetime.now()
+    date = datetime.datetime.today() + datetime.timedelta(days=1)
+    if now.hour < END_TIME.hour:
+        date = datetime.datetime.today()
+    context.user_data['change_future_config_date'] = date.date()
+
+    display_people_list(updater, context)
+    return PERSON_SELECT
 
 @restricted
 def change_default_config_callback(updater, context):
@@ -441,14 +455,8 @@ def select_future_config_date_callback(updater, context):
 
 def display_people_list(updater, context):
     # Change soldier's status in specific date
-    if not 'soldiers_list' in context.user_data.keys():
-        updater.message.reply_text(text='משיג רשימת חיילים')
-        report = Doch1_Report(user_config)
-        res = report.login_and_get_soldiers()
-        if not res[0]:
-            updater.message.reply_text(text=res[1], reply_markup=reply_markup)
-            return ConversationHandler.END 
-        context.user_data['soldiers_list'] = res[1]
+    if not 'soldiers_list' in context.user_data:
+        update_soldiers_list(updater, context)
 
     soldiers_chunks = divide_list_to_chunks(context.user_data['soldiers_list'], round(len(context.user_data['soldiers_list'])/2))
     keyboard_temp = [[KeyboardButton(soldier['firstName']+' '+soldier['lastName']) for soldier in soldier_group] for soldier_group in soldiers_chunks]
@@ -528,19 +536,12 @@ def cancel_future_config_callback(updater, context):
         updater.message.reply_text(text="You idiot, you don't even have any future config set !", reply_markup=reply_markup)
         return ConversationHandler.END
 
-    if len(conf_cache['send_confs']) != 0 or len(conf_cache['default_configs']) != 0:
-        if not 'soldiers_list' in context.user_data.keys():
-            updater.message.reply_text(text='משיג רשימת חיילים')
-            report = Doch1_Report(user_config)
-            res = report.login_and_get_soldiers()
-            if not res[0]:
-                updater.message.reply_text(text=res[1], reply_markup=reply_markup)
-                return
-            context.user_data['soldiers_list'] = res[1]
-            
-        soldiers = {}
-        for soldier in context.user_data['soldiers_list']:
-            soldiers[soldier['mi']] = soldier['firstName'] + ' ' + soldier['lastName']
+    if not 'soldiers_list' in context.user_data:
+        update_soldiers_list(updater, context)
+
+    soldiers = {}
+    for soldier in context.user_data['soldiers_list']:
+        soldiers[soldier['mi']] = soldier['firstName'] + ' ' + soldier['lastName']
     
     conf_cache['send_confs'] = OrderedDict(sorted(conf_cache['send_confs'].items()))
 
@@ -559,7 +560,7 @@ def cancel_future_config_callback(updater, context):
     return CANCEL_SELECT
 
 @restricted
-def select_config_to_cacnel_callback(updater, context):
+def select_config_to_cancel_callback(updater, context):
     if updater.message.text not in context.user_data["cancel_options"].keys():
         updater.message.reply_text(text="Bad option madafaka", reply_markup=reply_markup)
         return ConversationHandler.END
@@ -635,7 +636,8 @@ def main():
         entry_points=[CommandHandler('change_future_config', callback=change_future_config_callback)],
         states={
             DATE_SELECT: [MessageHandler(Filters.regex(r'^[0-9]{1,2}\.[0-9]{1,2}$'), select_future_config_date_callback),
-                          MessageHandler(Filters.regex(r'Change default'), change_default_config_callback)
+                          MessageHandler(Filters.regex(r'Change default'), change_default_config_callback),
+                          MessageHandler(Filters.regex(r'Next morning'), change_next_morning_config_callback),
                           ],
             PERSON_SELECT: [MessageHandler(Filters.regex(r'^[\u0590-\u05fe\s\']+$'), soldier_name_callback)],
             STATUS_SELECT: [MessageHandler(Filters.regex(r'^[0-9]{1,2}.+$'), soldier_change_status_callback)],
@@ -647,7 +649,7 @@ def main():
     dp.add_handler(ConversationHandler(
         entry_points=[CommandHandler('cancel_future_config', callback=cancel_future_config_callback)],
         states={
-            CANCEL_SELECT: [MessageHandler(Filters.regex("never mind"), cancel_callback), MessageHandler(None, select_config_to_cacnel_callback),],
+            CANCEL_SELECT: [MessageHandler(Filters.regex("never mind"), cancel_callback), MessageHandler(None, select_config_to_cancel_callback),],
         },
         fallbacks=[],
     ))
