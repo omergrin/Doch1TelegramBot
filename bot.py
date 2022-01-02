@@ -375,7 +375,7 @@ def toggle_auto_send_by_text_callback(updater, context):
         updater.message.reply_text(text='Next Morning !', reply_markup=reply_markup)
         now = datetime.datetime.now()
         date = datetime.datetime.today() + datetime.timedelta(days=1)
-        if now.hour < END_TIME.hour:
+        if now.hour < START_TIME.hour:
             date = datetime.datetime.today()
         toggle_auto_send(updater, date.date())
     else:
@@ -429,7 +429,7 @@ def change_future_config_callback(updater, context):
 def change_next_morning_config_callback(updater, context):
     now = datetime.datetime.now()
     date = datetime.datetime.today() + datetime.timedelta(days=1)
-    if now.hour < END_TIME.hour:
+    if now.hour < START_TIME.hour:
         date = datetime.datetime.today()
     context.user_data['change_future_config_date'] = date.date()
 
