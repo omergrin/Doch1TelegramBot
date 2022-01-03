@@ -18,7 +18,7 @@ import pickle
 import datetime
 from report import Doch1_Report
 
-DATE_SELECT, PERSON_SELECT, STATUS_SELECT, CANCEL_SELECT = range(1,5)
+DATE_SELECT, PERSON_SELECT, STATUS_SELECT, NOTE_OUT_OF_BASE_SELECT, CANCEL_SELECT = range(1,6)
 CANCEL_TYPE_SEND_CONFS, CANCEL_TYPE_DEFAULT_CONFIGS, CANCEL_TYPE_SEND_DATE = range(1,4)
 
 """
@@ -152,26 +152,27 @@ CANCEL_TYPE_SEND_CONFS, CANCEL_TYPE_DEFAULT_CONFIGS, CANCEL_TYPE_SEND_DATE = ran
 possible_statuses = {
     '01':['נמצא ביחידה נוכח', '01', '01'],
     '02':['הגנש/אבטש', '02', '02'],
-    '03':['הפנייה רפואית', '02', '13'],
-    '04':['חופשה שנתית', '04', '01'],
-    '05':['חופשה צבורה - קבע', '04', '13'],
-    '06':['אזכרה (דרגה ראשונה)', '04', '11'],
-    '07':['גימלים (רופא)', '05', '01'],
-    '08':['יום ד\' (החלטת מפקד) - חובה', '05', '08'],
-    '09':['מחלה (הצהרה) - קבע', '05', '02'],
-    '10':['בקורס/הכשרה', '06', '01'],
-    '11':['חו"ל בתפקיד', '13', '02'],
-    '12':['חו"ל במיוחדת', '13', '04'],
-    '13':['חו"ל בחופשה - קבע', '13', '01'],
-    '14':['חו"ל בחופשה - חובה', '13', '28'],
-    '15':['יום סידורים חייל בודד', '02', '08'],
-    '16':['מסופח ליחידה אחרת', '03', '01'],
-    '17':['מיוחדת ע"ח המערכת - חובה', '12', '02'],
-    '18':['מיוחדת ע"ח חופשה שנתית - חובה', '12', '07'],
-    '19':['אבל - חובה', '12', '03'],
-    '20':['בידוד - מחלה שנתית', '17', '17'],
-    '21':['בידוד - ביחידה', '17', '18'],
-    '22':['בידוד - ע"ח חופשה שנתית - קבע', '17', '19'],
+    '02':['מחוץ ליחידה בתפקיד', '02', '05'],
+    '04':['הפנייה רפואית', '02', '13'],
+    '05':['חופשה שנתית', '04', '01'],
+    '06':['חופשה צבורה - קבע', '04', '13'],
+    '07':['אזכרה (דרגה ראשונה)', '04', '11'],
+    '08':['גימלים (רופא)', '05', '01'],
+    '09':['יום ד\' (החלטת מפקד) - חובה', '05', '08'],
+    '10':['מחלה (הצהרה) - קבע', '05', '02'],
+    '11':['בקורס/הכשרה', '06', '01'],
+    '12':['חו"ל בתפקיד', '13', '02'],
+    '13':['חו"ל במיוחדת', '13', '04'],
+    '14':['חו"ל בחופשה - קבע', '13', '01'],
+    '15':['חו"ל בחופשה - חובה', '13', '28'],
+    '16':['יום סידורים חייל בודד', '02', '08'],
+    '17':['מסופח ליחידה אחרת', '03', '01'],
+    '18':['מיוחדת ע"ח המערכת - חובה', '12', '02'],
+    '19':['מיוחדת ע"ח חופשה שנתית - חובה', '12', '07'],
+    '20':['אבל - חובה', '12', '03'],
+    '21':['בידוד - מחלה שנתית', '17', '17'],
+    '22':['בידוד - ביחידה', '17', '18'],
+    '23':['בידוד - ע"ח חופשה שנתית - קבע', '17', '19'],
 }
 
 
@@ -324,12 +325,16 @@ def show_future_config_callback(updater, context):
     text += '\nFuture configs:\n'    
     for date in conf_cache['send_confs'].keys():
         text += '  {date}:\n'.format(date=date.strftime('%d.%m.%Y'))
-        for soldier_mi, status_code in conf_cache['send_confs'][date].items():
-            text += '    {soldier_mi}: {status_code}\n'.format(soldier_mi=soldiers[soldier_mi], status_code=possible_statuses[status_code][0])
+        for soldier_mi, status in conf_cache['send_confs'][date].items():
+            status_code = status[0]
+            note = status[1]
+            text += '    {soldier_mi}: {status_code} {note}\n'.format(soldier_mi=soldiers[soldier_mi], status_code=possible_statuses[status_code][0], note=note)
 
     text += '\nDefault configs:\n'    
-    for soldier_mi, status_code in conf_cache['default_configs'].items():
-        text += '    {soldier_mi}: {status_code}\n'.format(soldier_mi=soldiers[soldier_mi], status_code=possible_statuses[status_code][0])
+    for soldier_mi, status in conf_cache['default_configs'].items():
+        status_code = status[0]
+        note = status[1]
+        text += '    {soldier_mi}: {status_code} {note}\n'.format(soldier_mi=soldiers[soldier_mi], status_code=possible_statuses[status_code][0], note=note)
 
     updater.message.reply_text(text=text)
 
@@ -416,6 +421,7 @@ def toggle_auto_send_by_date_callback(updater, context):
         return DATE_SELECT
 
     toggle_auto_send(updater, date)
+    return ConversationHandler.END
 
 
 @restricted
@@ -491,39 +497,69 @@ def soldier_name_callback(updater, context):
 
 @restricted
 def soldier_change_status_callback(updater, context):
-    """When sending status for a soldier in specific date""" 
+    """When sending status for a soldier in specific date or always"""
     status_code = updater.message.text.split("-")[0].strip().zfill(2)
-    soldier_to_change = context.user_data['change_future_config_soldier_to_change'] 
+    soldier_to_change = context.user_data['change_future_config_soldier_to_change']
     soldier_to_change_name = context.user_data['change_future_config_soldier_to_change_name']
     date_to_change = context.user_data['change_future_config_date']
+
+    if status_code == '02':
+        context.user_data['change_future_config_status_code'] = status_code
+        updater.message.reply_text(text='הערה:', reply_markup=remove_markup)
+        return NOTE_OUT_OF_BASE_SELECT
 
     context.user_data['change_future_config_soldier_to_change'] = None
     context.user_data['change_future_config_soldier_to_change_name'] = None
     context.user_data['change_future_config_date'] = None
-    
+
     # No such status
     if not status_code in possible_statuses.keys():
         updater.message.reply_text(text='אין סטטוס כזה, נסה שנית', reply_markup=reply_markup)
         return ConversationHandler.END
-    
+
     if date_to_change == "ALWAYS":
         if status_code == '01':
             if soldier_to_change in conf_cache['default_configs']:
                 del conf_cache['default_configs'][soldier_to_change]
         else:
-            conf_cache['default_configs'][soldier_to_change] = status_code
-        updater.message.reply_text(text='changed default status for {} to {}'.format(soldier_to_change_name, possible_statuses[status_code][0]), reply_markup=reply_markup)
+            conf_cache['default_configs'][soldier_to_change] = (status_code, '')
+        updater.message.reply_text(text='שיניתי את הסטטוס הדיפולטי של {soldier} ל{status}'.format(soldier=soldier_to_change_name, status=possible_statuses[status_code][0]), reply_markup=reply_markup)
         return ConversationHandler.END
 
     # Date does not exist yet in conf_cache['send_confs']
     if not date_to_change in conf_cache['send_confs'].keys():
         conf_cache['send_confs'][date_to_change] = {}
     
-    conf_cache['send_confs'][date_to_change][soldier_to_change] = status_code
-        
+    conf_cache['send_confs'][date_to_change][soldier_to_change] = (status_code, '')
     write_to_conf_cache()
     updater.message.reply_text(text='שיניתי בתאריך {date} את הסטטוס של {soldier} ל{status}'.format(date=date_to_change, soldier=soldier_to_change_name, status=possible_statuses[status_code][0]), reply_markup=reply_markup)
     return ConversationHandler.END
+
+@restricted
+def change_out_of_base_note_callback(updater, context):
+    """When changing future status for OUT OF BASE status, with note"""
+    status_code = context.user_data['change_future_config_status_code']
+    soldier_to_change = context.user_data['change_future_config_soldier_to_change']
+    soldier_to_change_name = context.user_data['change_future_config_soldier_to_change_name']
+    date_to_change = context.user_data['change_future_config_date']
+
+    note = updater.message.text
+    if date_to_change == "ALWAYS":
+        conf_cache['default_configs'][soldier_to_change] = (status_code, note)
+        updater.message.reply_text(text='שיניתי את הסטטוס הדיפולטי של {soldier} ל{status} {note}'.format(soldier=soldier_to_change_name, status=possible_statuses[status_code][0], note=note), reply_markup=reply_markup)
+        return ConversationHandler.END
+
+    # Date does not exist yet in conf_cache['send_confs']
+    if not date_to_change in conf_cache['send_confs'].keys():
+        conf_cache['send_confs'][date_to_change] = {}
+
+    conf_cache['send_confs'][date_to_change][soldier_to_change] = (status_code, note)
+    write_to_conf_cache()
+    updater.message.reply_text(text='שיניתי בתאריך {date} את הסטטוס של {soldier} ל{status} {note}'.format(date=date_to_change, soldier=soldier_to_change_name, status=possible_statuses[status_code][0],note=note), reply_markup=reply_markup)
+    return ConversationHandler.END
+
+
+
     
 @restricted 
 def cancel_callback(updater, context):
@@ -533,7 +569,8 @@ def cancel_callback(updater, context):
 @restricted
 def cancel_future_config_callback(updater, context):
     """When the command /cancel_future_config is issued."""
-    if len(conf_cache['send_confs']) == 0 and len(conf_cache['send_dates']) == 0 and len(conf_cache['default_configs']) == 0:
+    # If nothing to cancel
+    if len(conf_cache['send_confs']) == 0 and (conf_cache['always_send'] or len(conf_cache['send_dates']) == 0) and len(conf_cache['default_configs']) == 0:
         updater.message.reply_text(text="You idiot, you don't even have any future config set !", reply_markup=reply_markup)
         return ConversationHandler.END
 
@@ -545,29 +582,37 @@ def cancel_future_config_callback(updater, context):
         soldiers[soldier['mi']] = soldier['firstName'] + ' ' + soldier['lastName']
     
     conf_cache['send_confs'] = OrderedDict(sorted(conf_cache['send_confs'].items()))
-
+    
     options = {}
     keyboard_temp = []
+    # Generate cancel buttons for send configurations
     for date in conf_cache['send_confs'].keys():
         for soldier_mi, status in conf_cache['send_confs'][date].items():
-            option_text = '{date} - {soldier_mi} - {status}'.format(date=date.strftime('%d.%m.%Y'), soldier_mi=soldiers[soldier_mi], status=possible_statuses[status][0])
+            status_code = status[0]
+            note = status[1]
+            option_text = '{date} - {soldier_mi} - {status} {note}'.format(date=date.strftime('%d.%m.%Y'), soldier_mi=soldiers[soldier_mi], status=possible_statuses[status_code][0], note=note).strip()
             options[option_text] = (CANCEL_TYPE_SEND_CONFS, date, soldier_mi)
             keyboard_temp.append([KeyboardButton(option_text)])
 
-    for soldier_mi, status_code in conf_cache['default_configs'].items():
-        option_text = 'תמיד - {soldier_mi} - {status_code}'.format(soldier_mi=soldiers[soldier_mi], status_code=possible_statuses[status_code][0])
+    # Generate cancel buttons for default configurations
+    for soldier_mi, status in conf_cache['default_configs'].items():
+        status_code = status[0]
+        note = status[1]
+        option_text = 'תמיד - {soldier_mi} - {status_code} {note}'.format(soldier_mi=soldiers[soldier_mi], status_code=possible_statuses[status_code][0], note=note).strip()
         options[option_text] = (CANCEL_TYPE_DEFAULT_CONFIGS, soldier_mi)
         keyboard_temp.append([KeyboardButton(option_text)])
 
-    for date in conf_cache['send_dates']:
-        option_text = 'שליחה בתאריך - {date}'.format(date=date.strftime('%d.%m.%Y'))
-        options[option_text] = (CANCEL_TYPE_SEND_DATE, date)
-        keyboard_temp.append([KeyboardButton(option_text)])
+    # Generate cancel buttons for always send configurations (if always send is not on)
+    if not conf_cache['always_send']:
+        for date in conf_cache['send_dates']:
+            option_text = 'שליחה בתאריך - {date}'.format(date=date.strftime('%d.%m.%Y')).strip()
+            options[option_text] = (CANCEL_TYPE_SEND_DATE, date)
+            keyboard_temp.append([KeyboardButton(option_text)])
 
     keyboard_temp.append([KeyboardButton("never mind")])
     context.user_data["cancel_options"] = options
     temp_markup = ReplyKeyboardMarkup(keyboard_temp)
-    updater.message.reply_text(text="choose config to cancel", reply_markup=temp_markup)
+    updater.message.reply_text(text="בחר את הקונפיגורציה לביטול", reply_markup=temp_markup)
     return CANCEL_SELECT
 
 @restricted
@@ -594,7 +639,7 @@ def select_config_to_cancel_callback(updater, context):
         write_to_conf_cache()
 
 
-    updater.message.reply_text(text="Removed {}".format(updater.message.text), reply_markup=reply_markup)
+    updater.message.reply_text(text="הוסר הסטטוס {}".format(updater.message.text), reply_markup=reply_markup)
     return ConversationHandler.END
 
 
@@ -607,19 +652,24 @@ def send_report(report, soldiers_list):
     pre_placements = {}
     default_placements = conf_cache['default_configs']
     if default_placements:
-        for soldier_id, status_code in default_placements.items():
+        for soldier_id, status in default_placements.items():
+            status_code = status[0]
+            if status_code[1] != '':
+                pre_placements[soldier_id]['note'] = status_code[1]
             pre_placements[soldier_id] = {}
             pre_placements[soldier_id]['mainStatusCode'] = possible_statuses[status_code][1]
             pre_placements[soldier_id]['secondaryStatusCode'] = possible_statuses[status_code][2]
 
+
     todays_placement = conf_cache['send_confs'][datetime.datetime.today().date()] if datetime.datetime.today().date() in conf_cache['send_confs'] else None
     if todays_placement:
-        for soldier_id, status_code in todays_placement.items():
+        for soldier_id, status in todays_placement.items():
+            status_code = status[0]
+            if status_code[1] != '':
+                pre_placements[soldier_id]['note'] = status_code[1]
             pre_placements[soldier_id] = {}
             pre_placements[soldier_id]['mainStatusCode'] = possible_statuses[status_code][1]
             pre_placements[soldier_id]['secondaryStatusCode'] = possible_statuses[status_code][2]
-            #TODO: add option to send note on 'Outside base' status
-            #pre_placements[soldier_id]['note'] = 
     
     if pre_placements == {}:
         pre_placements = None
@@ -664,8 +714,8 @@ def main():
                           ],
             PERSON_SELECT: [MessageHandler(Filters.regex(r'^[\u0590-\u05fe\s\']+$'), soldier_name_callback)],
             STATUS_SELECT: [MessageHandler(Filters.regex(r'^[0-9]{1,2}.+$'), soldier_change_status_callback)],
-        },
-                           
+            NOTE_OUT_OF_BASE_SELECT: [MessageHandler(Filters.regex(r'^[\u0590-\u05fe\s\']+$'), change_out_of_base_note_callback)],
+        },              
         fallbacks=[MessageHandler(None, cancel_callback)]
     ))
     
@@ -701,3 +751,5 @@ if __name__ == '__main__':
     # See https://stackoverflow.com/questions/2953746/python-parse-comma-separated-number-into-int.
     locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
     main()
+
+
