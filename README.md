@@ -4,7 +4,9 @@
 ## Features
 
  - Auto send report on specific date
+ - Auto send reports by default
  - Change soldier's status on a specific date
+ - Change soldier's default status
  - Show future config
  - Send today's Doch1
  
@@ -12,7 +14,6 @@
  - More statuses
  - Edit note on 'Outside base' status
  - Cookies cache file
- - Add button to change a soldier's default status
 
 ## How to use
  1. clone the repository
