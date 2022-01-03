@@ -19,6 +19,7 @@ import datetime
 from report import Doch1_Report
 
 DATE_SELECT, PERSON_SELECT, STATUS_SELECT, CANCEL_SELECT = range(1,5)
+CANCEL_TYPE_SEND_CONFS, CANCEL_TYPE_DEFAULT_CONFIGS, CANCEL_TYPE_SEND_DATE = range(1,4)
 
 """
 #Hova
@@ -323,12 +324,12 @@ def show_future_config_callback(updater, context):
     text += '\nFuture configs:\n'    
     for date in conf_cache['send_confs'].keys():
         text += '  {date}:\n'.format(date=date.strftime('%d.%m.%Y'))
-        for key, val in conf_cache['send_confs'][date].items():
-            text += '    {key}: {val}\n'.format(key=soldiers[key], val=possible_statuses[val][0])
+        for soldier_mi, status_code in conf_cache['send_confs'][date].items():
+            text += '    {soldier_mi}: {status_code}\n'.format(soldier_mi=soldiers[soldier_mi], status_code=possible_statuses[status_code][0])
 
     text += '\nDefault configs:\n'    
     for soldier_mi, status_code in conf_cache['default_configs'].items():
-        text += '    {key}: {val}\n'.format(key=soldiers[soldier_mi], val=possible_statuses[status_code][0])
+        text += '    {soldier_mi}: {status_code}\n'.format(soldier_mi=soldiers[soldier_mi], status_code=possible_statuses[status_code][0])
 
     updater.message.reply_text(text=text)
 
@@ -532,7 +533,7 @@ def cancel_callback(updater, context):
 @restricted
 def cancel_future_config_callback(updater, context):
     """When the command /cancel_future_config is issued."""
-    if len(conf_cache['send_confs']) == 0:
+    if len(conf_cache['send_confs']) == 0 and len(conf_cache['send_dates']) == 0 and len(conf_cache['default_configs']) == 0:
         updater.message.reply_text(text="You idiot, you don't even have any future config set !", reply_markup=reply_markup)
         return ConversationHandler.END
 
@@ -548,10 +549,20 @@ def cancel_future_config_callback(updater, context):
     options = {}
     keyboard_temp = []
     for date in conf_cache['send_confs'].keys():
-        for key, val in conf_cache['send_confs'][date].items():
-            option_text = '{date} - {key} - {val}'.format(date=date.strftime('%d.%m.%Y'), key=soldiers[key], val=possible_statuses[val][0])
-            options[option_text] = (date, key)
+        for soldier_mi, status in conf_cache['send_confs'][date].items():
+            option_text = '{date} - {soldier_mi} - {status}'.format(date=date.strftime('%d.%m.%Y'), soldier_mi=soldiers[soldier_mi], status=possible_statuses[status][0])
+            options[option_text] = (CANCEL_TYPE_SEND_CONFS, date, soldier_mi)
             keyboard_temp.append([KeyboardButton(option_text)])
+
+    for soldier_mi, status_code in conf_cache['default_configs'].items():
+        option_text = 'תמיד - {soldier_mi} - {status_code}'.format(soldier_mi=soldiers[soldier_mi], status_code=possible_statuses[status_code][0])
+        options[option_text] = (CANCEL_TYPE_DEFAULT_CONFIGS, soldier_mi)
+        keyboard_temp.append([KeyboardButton(option_text)])
+
+    for date in conf_cache['send_dates']:
+        option_text = 'שליחה בתאריך - {date}'.format(date=date.strftime('%d.%m.%Y'))
+        options[option_text] = (CANCEL_TYPE_SEND_DATE, date)
+        keyboard_temp.append([KeyboardButton(option_text)])
 
     keyboard_temp.append([KeyboardButton("never mind")])
     context.user_data["cancel_options"] = options
@@ -565,12 +576,24 @@ def select_config_to_cancel_callback(updater, context):
         updater.message.reply_text(text="Bad option madafaka", reply_markup=reply_markup)
         return ConversationHandler.END
 
-    date, soldier_mi = context.user_data["cancel_options"][updater.message.text]
-    del conf_cache["send_confs"][date][soldier_mi]
-    # if conf_cache['send_confs'][date_to_change] is empty, delete it from the dates list
-    if len(conf_cache['send_confs'][date]) == 0:
-        del conf_cache['send_confs'][date]
-    write_to_conf_cache()
+    cancel_type = context.user_data["cancel_options"][updater.message.text][0]
+    if cancel_type == CANCEL_TYPE_SEND_CONFS:
+        _, date, soldier_mi = context.user_data["cancel_options"][updater.message.text]
+        del conf_cache["send_confs"][date][soldier_mi]
+        # if conf_cache['send_confs'][date_to_change] is empty, delete it from the dates list
+        if len(conf_cache['send_confs'][date]) == 0:
+            del conf_cache['send_confs'][date]
+        write_to_conf_cache()
+    elif cancel_type == CANCEL_TYPE_DEFAULT_CONFIGS:
+        _, soldier_mi = context.user_data["cancel_options"][updater.message.text]
+        del conf_cache["default_configs"][soldier_mi]
+        write_to_conf_cache()
+    elif cancel_type == CANCEL_TYPE_SEND_DATE:
+        _, date = context.user_data["cancel_options"][updater.message.text]
+        conf_cache["send_dates"].remove(date)
+        write_to_conf_cache()
+
+
     updater.message.reply_text(text="Removed {}".format(updater.message.text), reply_markup=reply_markup)
     return ConversationHandler.END
 
