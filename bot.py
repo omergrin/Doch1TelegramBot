@@ -152,7 +152,7 @@ CANCEL_TYPE_SEND_CONFS, CANCEL_TYPE_DEFAULT_CONFIGS, CANCEL_TYPE_SEND_DATE = ran
 possible_statuses = {
     '01':['נמצא ביחידה נוכח', '01', '01'],
     '02':['הגנש/אבטש', '02', '02'],
-    '02':['מחוץ ליחידה בתפקיד', '02', '05'],
+    '03':['מחוץ ליחידה בתפקיד', '02', '05'],
     '04':['הפנייה רפואית', '02', '13'],
     '05':['חופשה שנתית', '04', '01'],
     '06':['חופשה צבורה - קבע', '04', '13'],
@@ -230,6 +230,7 @@ def setup_one_identity_routine(*args):
         else:
             print('Waiting for next time to report')
         # calc time until 8:00 am and sleep
+        now = datetime.datetime.now()
         time_to_sleep = (datetime.timedelta(hours=24) - (now-now.replace(hour=START_TIME.hour, minute=START_TIME.minute, second=START_TIME.second))).total_seconds() % (24 * 3600)
         print('Sleeping for {} hours'.format(time_to_sleep/60/60))
         time.sleep(time_to_sleep)
@@ -427,7 +428,7 @@ def toggle_auto_send_by_date_callback(updater, context):
 @restricted
 def change_future_config_callback(updater, context):
     """When the command /change_future_config is issued."""
-    keyboard_temp = [[KeyboardButton('Next morning')], [KeyboardButton('Change default')], [KeyboardButton('X')]]
+    keyboard_temp = [[KeyboardButton('Next morning'), KeyboardButton('Today')], [KeyboardButton('Change default')], [KeyboardButton('X')]]
     temp_markup = ReplyKeyboardMarkup(keyboard_temp)
     updater.message.reply_text(text='באיזה תאריך? (פורמט dd.mm)', reply_markup=temp_markup)
     return DATE_SELECT      
@@ -439,6 +440,14 @@ def change_next_morning_config_callback(updater, context):
     if now.hour < START_TIME.hour:
         date = datetime.datetime.today()
     context.user_data['change_future_config_date'] = date.date()
+
+    display_people_list(updater, context)
+    return PERSON_SELECT
+
+@restricted
+def change_today_config_callback(updater, context):
+    now = datetime.datetime.now()
+    context.user_data['change_future_config_date'] = now.date()
 
     display_people_list(updater, context)
     return PERSON_SELECT
@@ -503,11 +512,26 @@ def soldier_change_status_callback(updater, context):
     soldier_to_change_name = context.user_data['change_future_config_soldier_to_change_name']
     date_to_change = context.user_data['change_future_config_date']
 
-    if status_code == '02':
+    # If status is out of base, ask for note
+    if status_code == '03':
         context.user_data['change_future_config_status_code'] = status_code
         updater.message.reply_text(text='הערה:', reply_markup=remove_markup)
         return NOTE_OUT_OF_BASE_SELECT
 
+    return soldier_change_status(updater, context, status_code, soldier_to_change, soldier_to_change_name, date_to_change, '')
+
+@restricted
+def change_out_of_base_note_callback(updater, context):
+    """When changing future status for OUT OF BASE status, with note"""
+    status_code = context.user_data['change_future_config_status_code']
+    soldier_to_change = context.user_data['change_future_config_soldier_to_change']
+    soldier_to_change_name = context.user_data['change_future_config_soldier_to_change_name']
+    date_to_change = context.user_data['change_future_config_date']
+
+    return soldier_change_status(updater, context, status_code, soldier_to_change, soldier_to_change_name, date_to_change, updater.message.text)
+
+def soldier_change_status(updater, context, status_code, soldier_to_change, soldier_to_change_name, date_to_change, note):
+    """Save soldier's status"""
     context.user_data['change_future_config_soldier_to_change'] = None
     context.user_data['change_future_config_soldier_to_change_name'] = None
     context.user_data['change_future_config_date'] = None
@@ -522,44 +546,18 @@ def soldier_change_status_callback(updater, context):
             if soldier_to_change in conf_cache['default_configs']:
                 del conf_cache['default_configs'][soldier_to_change]
         else:
-            conf_cache['default_configs'][soldier_to_change] = (status_code, '')
-        updater.message.reply_text(text='שיניתי את הסטטוס הדיפולטי של {soldier} ל{status}'.format(soldier=soldier_to_change_name, status=possible_statuses[status_code][0]), reply_markup=reply_markup)
-        return ConversationHandler.END
-
-    # Date does not exist yet in conf_cache['send_confs']
-    if not date_to_change in conf_cache['send_confs'].keys():
-        conf_cache['send_confs'][date_to_change] = {}
-    
-    conf_cache['send_confs'][date_to_change][soldier_to_change] = (status_code, '')
-    write_to_conf_cache()
-    updater.message.reply_text(text='שיניתי בתאריך {date} את הסטטוס של {soldier} ל{status}'.format(date=date_to_change, soldier=soldier_to_change_name, status=possible_statuses[status_code][0]), reply_markup=reply_markup)
-    return ConversationHandler.END
-
-@restricted
-def change_out_of_base_note_callback(updater, context):
-    """When changing future status for OUT OF BASE status, with note"""
-    status_code = context.user_data['change_future_config_status_code']
-    soldier_to_change = context.user_data['change_future_config_soldier_to_change']
-    soldier_to_change_name = context.user_data['change_future_config_soldier_to_change_name']
-    date_to_change = context.user_data['change_future_config_date']
-
-    note = updater.message.text
-    if date_to_change == "ALWAYS":
-        conf_cache['default_configs'][soldier_to_change] = (status_code, note)
+            conf_cache['default_configs'][soldier_to_change] = (status_code, note)
         updater.message.reply_text(text='שיניתי את הסטטוס הדיפולטי של {soldier} ל{status} {note}'.format(soldier=soldier_to_change_name, status=possible_statuses[status_code][0], note=note), reply_markup=reply_markup)
-        return ConversationHandler.END
+    else:
+        # Date does not exist yet in conf_cache['send_confs']
+        if not date_to_change in conf_cache['send_confs'].keys():
+            conf_cache['send_confs'][date_to_change] = {}
 
-    # Date does not exist yet in conf_cache['send_confs']
-    if not date_to_change in conf_cache['send_confs'].keys():
-        conf_cache['send_confs'][date_to_change] = {}
+        conf_cache['send_confs'][date_to_change][soldier_to_change] = (status_code, note)
+        updater.message.reply_text(text='שיניתי בתאריך {date} את הסטטוס של {soldier} ל{status} {note}'.format(date=date_to_change, soldier=soldier_to_change_name, status=possible_statuses[status_code][0],note=note), reply_markup=reply_markup)
 
-    conf_cache['send_confs'][date_to_change][soldier_to_change] = (status_code, note)
     write_to_conf_cache()
-    updater.message.reply_text(text='שיניתי בתאריך {date} את הסטטוס של {soldier} ל{status} {note}'.format(date=date_to_change, soldier=soldier_to_change_name, status=possible_statuses[status_code][0],note=note), reply_markup=reply_markup)
     return ConversationHandler.END
-
-
-
     
 @restricted 
 def cancel_callback(updater, context):
@@ -628,17 +626,14 @@ def select_config_to_cancel_callback(updater, context):
         # if conf_cache['send_confs'][date_to_change] is empty, delete it from the dates list
         if len(conf_cache['send_confs'][date]) == 0:
             del conf_cache['send_confs'][date]
-        write_to_conf_cache()
     elif cancel_type == CANCEL_TYPE_DEFAULT_CONFIGS:
         _, soldier_mi = context.user_data["cancel_options"][updater.message.text]
         del conf_cache["default_configs"][soldier_mi]
-        write_to_conf_cache()
     elif cancel_type == CANCEL_TYPE_SEND_DATE:
         _, date = context.user_data["cancel_options"][updater.message.text]
         conf_cache["send_dates"].remove(date)
-        write_to_conf_cache()
 
-
+    write_to_conf_cache()
     updater.message.reply_text(text="הוסר הסטטוס {}".format(updater.message.text), reply_markup=reply_markup)
     return ConversationHandler.END
 
@@ -653,21 +648,20 @@ def send_report(report, soldiers_list):
     default_placements = conf_cache['default_configs']
     if default_placements:
         for soldier_id, status in default_placements.items():
-            status_code = status[0]
-            if status_code[1] != '':
-                pre_placements[soldier_id]['note'] = status_code[1]
             pre_placements[soldier_id] = {}
+            status_code = status[0]
+            if status[1] != '':
+                pre_placements[soldier_id]['note'] = status[1]
             pre_placements[soldier_id]['mainStatusCode'] = possible_statuses[status_code][1]
             pre_placements[soldier_id]['secondaryStatusCode'] = possible_statuses[status_code][2]
-
 
     todays_placement = conf_cache['send_confs'][datetime.datetime.today().date()] if datetime.datetime.today().date() in conf_cache['send_confs'] else None
     if todays_placement:
         for soldier_id, status in todays_placement.items():
-            status_code = status[0]
-            if status_code[1] != '':
-                pre_placements[soldier_id]['note'] = status_code[1]
             pre_placements[soldier_id] = {}
+            status_code = status[0]
+            if status[1] != '':
+                pre_placements[soldier_id]['note'] = status[1]
             pre_placements[soldier_id]['mainStatusCode'] = possible_statuses[status_code][1]
             pre_placements[soldier_id]['secondaryStatusCode'] = possible_statuses[status_code][2]
     
@@ -711,10 +705,11 @@ def main():
             DATE_SELECT: [MessageHandler(Filters.regex(r'^[0-9]{1,2}\.[0-9]{1,2}$'), select_future_config_date_callback),
                           MessageHandler(Filters.regex(r'Change default'), change_default_config_callback),
                           MessageHandler(Filters.regex(r'Next morning'), change_next_morning_config_callback),
+                          MessageHandler(Filters.regex(r'Today'), change_today_config_callback),
                           ],
             PERSON_SELECT: [MessageHandler(Filters.regex(r'^[\u0590-\u05fe\s\']+$'), soldier_name_callback)],
             STATUS_SELECT: [MessageHandler(Filters.regex(r'^[0-9]{1,2}.+$'), soldier_change_status_callback)],
-            NOTE_OUT_OF_BASE_SELECT: [MessageHandler(Filters.regex(r'^[\u0590-\u05fe\s\']+$'), change_out_of_base_note_callback)],
+            NOTE_OUT_OF_BASE_SELECT: [MessageHandler(Filters.regex(r'.*'), change_out_of_base_note_callback)],
         },              
         fallbacks=[MessageHandler(None, cancel_callback)]
     ))
