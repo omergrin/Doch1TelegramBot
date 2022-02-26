@@ -179,7 +179,12 @@ possible_statuses = {
 START_TIME = datetime.time(8, 0, 0)
 END_TIME = datetime.time(10, 30, 0)
 
-custom_keyboard = [[KeyboardButton('/send_today')], [KeyboardButton('/show_future_config')], [KeyboardButton('/toggle_auto_send'), KeyboardButton('/change_future_config')], [KeyboardButton('/cancel_future_config')],]
+custom_keyboard = [
+    [KeyboardButton('שלח דיווח')],
+    [KeyboardButton('הצג קונפיגורציה')],
+    [KeyboardButton('שנה דיווח אוטומטי'), KeyboardButton('שנה סטטוס עתידי')],
+    [KeyboardButton('בטל סטטוס עתידי')]
+]
 reply_markup = ReplyKeyboardMarkup(custom_keyboard)
 remove_markup = ReplyKeyboardRemove()
 
@@ -316,14 +321,14 @@ def show_future_config_callback(updater, context):
     
     conf_cache['send_dates'].sort()
     conf_cache['send_confs'] = OrderedDict(sorted(conf_cache['send_confs'].items()))
-    text='Future auto send dates:\n'
+    text='תאריכים לשליחת דיווח אוטומטי:\n'
     if conf_cache['always_send']:
-        text += "Always !\n"
+        text += "    בכל בוקר!\n"
     else:
         for date in conf_cache['send_dates']:
             text += '  {date}\n'.format(date=date.strftime('%d.%m.%Y'))
 
-    text += '\nFuture configs:\n'    
+    text += '\nסטטוסים עתידיים:\n'    
     for date in conf_cache['send_confs'].keys():
         text += '  {date}:\n'.format(date=date.strftime('%d.%m.%Y'))
         for soldier_mi, status in conf_cache['send_confs'][date].items():
@@ -331,7 +336,7 @@ def show_future_config_callback(updater, context):
             note = status[1]
             text += '    {soldier_mi}: {status_code} {note}\n'.format(soldier_mi=soldiers[soldier_mi], status_code=possible_statuses[status_code][0], note=note)
 
-    text += '\nDefault configs:\n'    
+    text += '\nסטטוסים דיפולטיביים:\n'    
     for soldier_mi, status in conf_cache['default_configs'].items():
         status_code = status[0]
         note = status[1]
@@ -347,7 +352,7 @@ def send_today_report_callback(updater, context):
         updater.message.reply_text(text='משיג רשימת חיילים')
         res = report.login_and_get_soldiers()
         if not res[0]:
-           updater.message.reply_text(text=res[1], reply_markup=reply_markup)
+            updater.message.reply_text(text=res[1], reply_markup=reply_markup)
         context.user_data['soldiers_list'] = res[1]
         updater.message.reply_text(text='שולח')
         res = send_report(report, res[1])
@@ -358,9 +363,9 @@ def send_today_report_callback(updater, context):
     updater.message.reply_text(text='איך תרצה להמשיך?', reply_markup=reply_markup)
 
 def auto_send_options(updater):
-    keyboard_temp = [[KeyboardButton('next morning')], [KeyboardButton('always on'), KeyboardButton('disable always on')], [KeyboardButton('X')]]
+    keyboard_temp = [[KeyboardButton('רק מחר בבוקר')], [KeyboardButton('בכל בוקר'), KeyboardButton('אף פעם')], [KeyboardButton('X')]]
     temp_markup = ReplyKeyboardMarkup(keyboard_temp)
-    updater.message.reply_text(text='באיזה תאריך? (פורמט dd.mm)', reply_markup=temp_markup)
+    updater.message.reply_text(text='מתי תרצה שאשלח דיווח אוטומטי?', reply_markup=temp_markup)
 
 @restricted
 def toggle_auto_send_callback(updater, context):
@@ -370,16 +375,16 @@ def toggle_auto_send_callback(updater, context):
 
 @restricted
 def toggle_auto_send_by_text_callback(updater, context):
-    if updater.message.text == "always on":
+    if updater.message.text == "בכל בוקר":
         conf_cache['always_send'] = True
         write_to_conf_cache()
-        updater.message.reply_text(text='Auto send is now always on !', reply_markup=reply_markup)
-    elif updater.message.text == "disable always on":
+        updater.message.reply_text(text='מעכשיו דיווח יישלח באופן אוטומטי בכל בוקר!', reply_markup=reply_markup)
+    elif updater.message.text == "אף פעם":
         conf_cache['always_send'] = False
         write_to_conf_cache()
-        updater.message.reply_text(text='always on canceled !', reply_markup=reply_markup)
-    elif updater.message.text == "next morning":
-        updater.message.reply_text(text='Next Morning !', reply_markup=reply_markup)
+        updater.message.reply_text(text='מעכשיו לא אשלח דיווח באופן אוטומטי!', reply_markup=reply_markup)
+    elif updater.message.text == "רק מחר בבוקר":
+        updater.message.reply_text(text='מחר בבוקר אשלח דיווח אוטומטי!', reply_markup=reply_markup)
         now = datetime.datetime.now()
         date = datetime.datetime.today() + datetime.timedelta(days=1)
         if now.hour < START_TIME.hour:
@@ -428,10 +433,10 @@ def toggle_auto_send_by_date_callback(updater, context):
 @restricted
 def change_future_config_callback(updater, context):
     """When the command /change_future_config is issued."""
-    keyboard_temp = [[KeyboardButton('Next morning'), KeyboardButton('Today')], [KeyboardButton('Change default')], [KeyboardButton('X')]]
+    keyboard_temp = [[KeyboardButton('בבוקר הבא'), KeyboardButton('היום')], [KeyboardButton('באופן קבוע')], [KeyboardButton('X')]]
     temp_markup = ReplyKeyboardMarkup(keyboard_temp)
     updater.message.reply_text(text='באיזה תאריך? (פורמט dd.mm)', reply_markup=temp_markup)
-    return DATE_SELECT      
+    return DATE_SELECT
 
 @restricted
 def change_next_morning_config_callback(updater, context):
@@ -607,7 +612,7 @@ def cancel_future_config_callback(updater, context):
             options[option_text] = (CANCEL_TYPE_SEND_DATE, date)
             keyboard_temp.append([KeyboardButton(option_text)])
 
-    keyboard_temp.append([KeyboardButton("never mind")])
+    keyboard_temp.append([KeyboardButton("X")])
     context.user_data["cancel_options"] = options
     temp_markup = ReplyKeyboardMarkup(keyboard_temp)
     updater.message.reply_text(text="בחר את הקונפיגורציה לביטול", reply_markup=temp_markup)
@@ -685,14 +690,14 @@ def main():
     # Get the dispatcher to register handlers
     dp = updater.dispatcher
     
-    dp.add_handler(CommandHandler('send_today', send_today_report_callback))
-    dp.add_handler(CommandHandler('show_future_config', show_future_config_callback))
+    dp.add_handler(MessageHandler(Filters.text(['שלח דיווח']), send_today_report_callback))
+    dp.add_handler(MessageHandler(Filters.text(['הצג קונפיגורציה']), show_future_config_callback))
 
     dp.add_handler(ConversationHandler(
-        entry_points=[CommandHandler('toggle_auto_send', callback=toggle_auto_send_callback)],
+        entry_points=[MessageHandler(Filters.text(['שנה דיווח אוטומטי']), callback=toggle_auto_send_callback)],
         states={
             DATE_SELECT: [MessageHandler(Filters.regex(r'^[0-9]{1,2}\.[0-9]{1,2}$'), toggle_auto_send_by_date_callback),
-                          MessageHandler(Filters.regex('X'), callback=cancel_callback),
+                          MessageHandler(Filters.text('X'), callback=cancel_callback),
                           MessageHandler(None, callback=toggle_auto_send_by_text_callback),
                           ],
         },
@@ -700,24 +705,24 @@ def main():
     ))
 
     dp.add_handler(ConversationHandler(
-        entry_points=[CommandHandler('change_future_config', callback=change_future_config_callback)],
+        entry_points=[MessageHandler(Filters.text(['שנה סטטוס עתידי']), callback=change_future_config_callback)],
         states={
             DATE_SELECT: [MessageHandler(Filters.regex(r'^[0-9]{1,2}\.[0-9]{1,2}$'), select_future_config_date_callback),
-                          MessageHandler(Filters.regex(r'Change default'), change_default_config_callback),
-                          MessageHandler(Filters.regex(r'Next morning'), change_next_morning_config_callback),
-                          MessageHandler(Filters.regex(r'Today'), change_today_config_callback),
+                          MessageHandler(Filters.text('באופן קבוע'), change_default_config_callback),
+                          MessageHandler(Filters.text('בבוקר הבא'), change_next_morning_config_callback),
+                          MessageHandler(Filters.text('היום'), change_today_config_callback),
                           ],
             PERSON_SELECT: [MessageHandler(Filters.regex(r'^[\u0590-\u05fe\s\']+$'), soldier_name_callback)],
             STATUS_SELECT: [MessageHandler(Filters.regex(r'^[0-9]{1,2}.+$'), soldier_change_status_callback)],
-            NOTE_OUT_OF_BASE_SELECT: [MessageHandler(Filters.regex(r'.*'), change_out_of_base_note_callback)],
-        },              
+            NOTE_OUT_OF_BASE_SELECT: [MessageHandler(Filters.text, change_out_of_base_note_callback)],
+        },
         fallbacks=[MessageHandler(None, cancel_callback)]
     ))
     
     dp.add_handler(ConversationHandler(
-        entry_points=[CommandHandler('cancel_future_config', callback=cancel_future_config_callback)],
+        entry_points=[MessageHandler(Filters.text(['בטל סטטוס עתידי']), callback=cancel_future_config_callback)],
         states={
-            CANCEL_SELECT: [MessageHandler(Filters.regex("never mind"), cancel_callback), MessageHandler(None, select_config_to_cancel_callback),],
+            CANCEL_SELECT: [MessageHandler(Filters.text("X"), cancel_callback), MessageHandler(None, select_config_to_cancel_callback),],
         },
         fallbacks=[],
     ))
