@@ -9,10 +9,10 @@
  - Change soldier's default status
  - Show future config
  - Send today's Doch1
+ - Send OUT OF BASE status with note
  
 ## To be impelemnted
  - More statuses
- - Edit note on 'Outside base' status
  - Cookies cache file
 
 ## How to use

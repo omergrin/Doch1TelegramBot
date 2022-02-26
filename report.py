@@ -12,15 +12,15 @@ class Doch1_Report:
     def login_and_get_soldiers(self):
         res = self.is_logged_in()
         if not res[0]:
-            return False, 'Error: '+res
+            return False, 'Error: ' + res[1]
         
         res = self.login()
         if not res[0]:
-            return False, 'Error: '+res
+            return False, 'Error: ' + res[1]
             
         res = self.get_soldiers()
         if not res[0]:
-            return False, 'Error: '+res
+            return False, 'Error: ' + res[1]
         
         return True, res[1]
     
