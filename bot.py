@@ -363,7 +363,7 @@ def send_today_report_callback(updater, context):
     updater.message.reply_text(text='איך תרצה להמשיך?', reply_markup=reply_markup)
 
 def auto_send_options(updater):
-    keyboard_temp = [[KeyboardButton('רק מחר בבוקר')], [KeyboardButton('בכל בוקר'), KeyboardButton('אף פעם')], [KeyboardButton('X')]]
+    keyboard_temp = [[KeyboardButton('רק מחר בבוקר')], [KeyboardButton('בכל בוקר'), KeyboardButton('רק בתאריכים שהוגדרו')], [KeyboardButton('X')]]
     temp_markup = ReplyKeyboardMarkup(keyboard_temp)
     updater.message.reply_text(text='מתי תרצה שאשלח דיווח אוטומטי?', reply_markup=temp_markup)
 
@@ -379,10 +379,10 @@ def toggle_auto_send_by_text_callback(updater, context):
         conf_cache['always_send'] = True
         write_to_conf_cache()
         updater.message.reply_text(text='מעכשיו דיווח יישלח באופן אוטומטי בכל בוקר!', reply_markup=reply_markup)
-    elif updater.message.text == "אף פעם":
+    elif updater.message.text == "רק בתאריכים שהוגדרו":
         conf_cache['always_send'] = False
         write_to_conf_cache()
-        updater.message.reply_text(text='מעכשיו לא אשלח דיווח באופן אוטומטי!', reply_markup=reply_markup)
+        updater.message.reply_text(text='מעכשיו אשלח דיווח רק בתאריכים שהוגדרו ולא בכל בוקר!', reply_markup=reply_markup)
     elif updater.message.text == "רק מחר בבוקר":
         updater.message.reply_text(text='מחר בבוקר אשלח דיווח אוטומטי!', reply_markup=reply_markup)
         now = datetime.datetime.now()
