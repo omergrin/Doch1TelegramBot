@@ -491,7 +491,7 @@ def select_future_config_date_callback(update, context):
     update.callback_query.message.edit_reply_markup(None)
     update.callback_query.message.reply_text('בחרת בתאריך {}'.format(selected_date.isoformat()))
 
-    if 'change_future_config_date' not in context.user_data or context.user_data['change_future_config_date'] is None:
+    if context.user_data.get("change_future_config_date") is None:
         context.user_data['change_future_config_date'] = [selected_date]
 
         calendar, _ = DetailedTelegramCalendar(min_date=selected_date).build()
