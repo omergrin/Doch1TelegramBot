@@ -19,7 +19,7 @@
  1. clone the repository
  2. copy "config.json.example" to "config.json" in the same directory
  3. edit config.json (with your personal data), more details [here](#example-configuration-file)
- 4. Install python-telegram-bot by using the following pip command: pip install python-telegram-bot==12.0.0b1 --upgrade
+ 4. Install requirements: `pip install -r requirements.txt`
  5. run from command line: `python3 bot.py`
 
 ## Example Configuration file
