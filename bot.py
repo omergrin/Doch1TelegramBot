@@ -210,7 +210,7 @@ def restricted(func):
             chat_id = updater.callback_query.message.chat.id
         if str(chat_id) != user_config['telegram_chat_id']:
             print('Unauthorized access denied for chat {}.'.format(chat_id))
-            updater.bot.send_message(chat_id=user_config['telegram_chat_id'], text='Unauthorized access denied for chat {}.'.format(user_id))
+            updater.bot.send_message(chat_id=user_config['telegram_chat_id'], text='Unauthorized access denied for chat {}.'.format(chat_id))
             return
         return func(updater, context, *args, **kwargs)
     return wrapped
