@@ -478,6 +478,8 @@ def select_future_config_date_callback(update, context):
         calendar, _ = DetailedTelegramCalendar(min_date=datetime.date.today()).build()
         update.message.reply_text('מאיזה תאריך?', reply_markup=calendar)
 
+        context.user_data['change_future_config_date'] = None
+
         return None
 
     selected_date, calendar, _ = DetailedTelegramCalendar().process(update.callback_query.data)
