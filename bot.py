@@ -3,8 +3,10 @@
 
 import logging
 import json
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, RegexHandler, ConversationHandler
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, RegexHandler, ConversationHandler, CallbackQueryHandler
 from telegram import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from telegram_bot_calendar import DetailedTelegramCalendar
+from telegram_bot_calendar.base import CB_CALENDAR
 from functools import wraps
 from collections import OrderedDict
 import locale
@@ -202,7 +204,10 @@ logger = logging.getLogger(__name__)
 def restricted(func):
     @wraps(func)
     def wrapped(updater, context, *args, **kwargs):
-        chat_id = updater.message.chat.id
+        if updater.message is not None:
+            chat_id = updater.message.chat.id
+        else:
+            chat_id = updater.callback_query.message.chat.id
         if str(chat_id) != user_config['telegram_chat_id']:
             print('Unauthorized access denied for chat {}.'.format(chat_id))
             updater.bot.send_message(chat_id=user_config['telegram_chat_id'], text='Unauthorized access denied for chat {}.'.format(user_id))
@@ -302,11 +307,13 @@ def delete_conf_cache_old_dates():
     write_to_conf_cache()
 
 def update_soldiers_list(updater, context):
-    updater.message.reply_text(text='משיג רשימת חיילים')
+    message = updater.message if updater.message is not None else updater.callback_query.message
+
+    message.reply_text(text='משיג רשימת חיילים')
     report = Doch1_Report(user_config)
     res = report.login_and_get_soldiers()
     if not res[0]:
-        updater.message.reply_text(text=res[1], reply_markup=reply_markup)
+        message.reply_text(text=res[1], reply_markup=reply_markup)
         return
     context.user_data['soldiers_list'] = res[1]
 
@@ -435,9 +442,9 @@ def toggle_auto_send_by_date_callback(updater, context):
 @restricted
 def change_future_config_callback(updater, context):
     """When the command /change_future_config is issued."""
-    keyboard_temp = [[KeyboardButton('בבוקר הבא'), KeyboardButton('היום')], [KeyboardButton('באופן קבוע')], [KeyboardButton('X')]]
+    keyboard_temp = [[KeyboardButton('בבוקר הבא'), KeyboardButton('היום')], [KeyboardButton('בתאריכים מסוימים'), KeyboardButton('באופן קבוע')], [KeyboardButton('X')]]
     temp_markup = ReplyKeyboardMarkup(keyboard_temp)
-    updater.message.reply_text(text='באיזה תאריך? (פורמט dd.mm)', reply_markup=temp_markup)
+    updater.message.reply_text(text='מתי?', reply_markup=temp_markup)
     return DATE_SELECT
 
 @restricted
@@ -466,14 +473,40 @@ def change_default_config_callback(updater, context):
     return PERSON_SELECT
 
 @restricted
-def select_future_config_date_callback(updater, context):
-    date = parse_date(updater)
-    if not date:
-        updater.message.reply_text(text='חרא של תאריך הבאת לי', reply_markup=reply_markup)
+def select_future_config_date_callback(update, context):
+    if update.callback_query is None:
+        calendar, _ = DetailedTelegramCalendar(min_date=datetime.date.today()).build()
+        update.message.reply_text('מאיזה תאריך?', reply_markup=calendar)
+
+        return None
+
+    selected_date, calendar, _ = DetailedTelegramCalendar().process(update.callback_query.data)
+    if selected_date is None:
+        update.callback_query.message.edit_reply_markup(calendar)
+
+        return None
+
+    update.callback_query.message.edit_reply_markup(None)
+    update.callback_query.message.reply_text('בחרת בתאריך {}'.format(selected_date.isoformat()))
+
+    if 'change_future_config_date' not in context.user_data or context.user_data['change_future_config_date'] is None:
+        context.user_data['change_future_config_date'] = [selected_date]
+
+        calendar, _ = DetailedTelegramCalendar(min_date=selected_date).build()
+        update.callback_query.message.reply_text('עד איזה תאריך?', reply_markup=calendar)
+
+        return None
+
+    if context.user_data['change_future_config_date'][0] > selected_date:
+        update.callback_query.message.reply_text('מה זה סוג של מבחן? תאריך ההתחלה לא יכול להיות אחרי תאריך הסיום!')
+        context.user_data['change_future_config_date'] = None
+
+        update.callback_query.message.reply_text(text='איך תרצה להמשיך?', reply_markup=reply_markup)
+
         return ConversationHandler.END
 
-    context.user_data['change_future_config_date'] = date
-    display_people_list(updater, context)
+    context.user_data['change_future_config_date'].append(selected_date)
+    display_people_list(update, context)
     return PERSON_SELECT
 
 def display_people_list(updater, context):
@@ -481,11 +514,13 @@ def display_people_list(updater, context):
     if not 'soldiers_list' in context.user_data:
         update_soldiers_list(updater, context)
 
+    message = updater.message if updater.message is not None else updater.callback_query.message
+
     soldiers_chunks = divide_list_to_chunks(context.user_data['soldiers_list'], round(len(context.user_data['soldiers_list'])/2))
     keyboard_temp = [[KeyboardButton(soldier['firstName']+' '+soldier['lastName']) for soldier in soldier_group] for soldier_group in soldiers_chunks]
     keyboard_temp += [[KeyboardButton('X')]]
     temp_markup = ReplyKeyboardMarkup(keyboard_temp)
-    updater.message.reply_text(text='איזה חייל תרצה לשנות?', reply_markup=temp_markup)
+    message.reply_text(text='איזה חייל תרצה לשנות?', reply_markup=temp_markup)
     return PERSON_SELECT
 
 @restricted
@@ -556,12 +591,18 @@ def soldier_change_status(updater, context, status_code, soldier_to_change, sold
             conf_cache['default_configs'][soldier_to_change] = (status_code, note)
         updater.message.reply_text(text='שיניתי את הסטטוס הדיפולטי של {soldier} ל{status} {note}'.format(soldier=soldier_to_change_name, status=possible_statuses[status_code][0], note=note), reply_markup=reply_markup)
     else:
-        # Date does not exist yet in conf_cache['send_confs']
-        if not date_to_change in conf_cache['send_confs'].keys():
-            conf_cache['send_confs'][date_to_change] = {}
+        start_date = date_to_change[0]
+        end_date = date_to_change[1]
+        delta = datetime.timedelta(days=1)
+        while start_date <= end_date:
+            # Date does not exist yet in conf_cache['send_confs']
+            if not start_date in conf_cache['send_confs'].keys():
+                conf_cache['send_confs'][start_date] = {}
 
-        conf_cache['send_confs'][date_to_change][soldier_to_change] = (status_code, note)
-        updater.message.reply_text(text='שיניתי בתאריך {date} את הסטטוס של {soldier} ל{status} {note}'.format(date=date_to_change, soldier=soldier_to_change_name, status=possible_statuses[status_code][0],note=note), reply_markup=reply_markup)
+            conf_cache['send_confs'][start_date][soldier_to_change] = (status_code, note)
+            updater.message.reply_text(text='שיניתי בתאריך {date} את הסטטוס של {soldier} ל{status} {note}'.format(date=start_date, soldier=soldier_to_change_name, status=possible_statuses[status_code][0],note=note), reply_markup=reply_markup)
+
+            start_date += delta
 
     write_to_conf_cache()
     return ConversationHandler.END
@@ -709,7 +750,8 @@ def main():
     dp.add_handler(ConversationHandler(
         entry_points=[MessageHandler(Filters.text(['שנה סטטוס עתידי']), callback=change_future_config_callback)],
         states={
-            DATE_SELECT: [MessageHandler(Filters.regex(r'^[0-9]{1,2}\.[0-9]{1,2}$'), select_future_config_date_callback),
+            DATE_SELECT: [MessageHandler(Filters.text('בתאריכים מסוימים'), select_future_config_date_callback),
+                          CallbackQueryHandler(select_future_config_date_callback, pattern=r'^'+CB_CALENDAR),
                           MessageHandler(Filters.text('באופן קבוע'), change_default_config_callback),
                           MessageHandler(Filters.text('בבוקר הבא'), change_next_morning_config_callback),
                           MessageHandler(Filters.text('היום'), change_today_config_callback),
@@ -753,5 +795,3 @@ if __name__ == '__main__':
     # See https://stackoverflow.com/questions/2953746/python-parse-comma-separated-number-into-int.
     locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
     main()
-
-
