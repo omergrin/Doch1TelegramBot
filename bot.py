@@ -453,7 +453,7 @@ def change_next_morning_config_callback(updater, context):
     date = datetime.datetime.today() + datetime.timedelta(days=1)
     if now.hour < START_TIME.hour:
         date = datetime.datetime.today()
-    context.user_data['change_future_config_date'] = date.date()
+    context.user_data['change_future_config_date'] = [date.date(), date.date()]
 
     display_people_list(updater, context)
     return PERSON_SELECT
@@ -461,7 +461,7 @@ def change_next_morning_config_callback(updater, context):
 @restricted
 def change_today_config_callback(updater, context):
     now = datetime.datetime.now()
-    context.user_data['change_future_config_date'] = now.date()
+    context.user_data['change_future_config_date'] = [now.date(), now.date()]
 
     display_people_list(updater, context)
     return PERSON_SELECT
