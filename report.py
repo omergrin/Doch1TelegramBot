@@ -1,4 +1,6 @@
 import requests
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
 import json
 
 
@@ -8,6 +10,7 @@ class Doch1_Report:
         self.session = requests.session()
         self.config = config
         self.session.cookies = requests.utils.cookiejar_from_dict(self.config["cookies"])
+        self.session.mount("https://", HTTPAdapter(max_retries=Retry(connect=10, backoff_factor=0.8)))
     
     def login_and_get_soldiers(self):
         res = self.is_logged_in()
