@@ -4,7 +4,7 @@
 import logging
 import json
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, RegexHandler, ConversationHandler, CallbackQueryHandler
-from telegram import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from telegram import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram_bot_calendar.base import CB_CALENDAR
 from functools import wraps
 from collections import OrderedDict
@@ -186,7 +186,8 @@ custom_keyboard = [
     [KeyboardButton('שלח דיווח')],
     [KeyboardButton('הצג קונפיגורציה'), KeyboardButton('עדכן רשימת חיילים')],
     [KeyboardButton('שנה דיווח אוטומטי'), KeyboardButton('שנה סטטוס עתידי')],
-    [KeyboardButton('בטל סטטוס עתידי')]
+    [KeyboardButton('בטל סטטוס עתידי')],
+    [KeyboardButton('בחר חיילים')]
 ]
 reply_markup = ReplyKeyboardMarkup(custom_keyboard)
 remove_markup = ReplyKeyboardRemove()
@@ -282,6 +283,7 @@ def initialize_conf_cache(conf_cache_path='conf.cache'):
         conf_cache['send_confs']={}
         conf_cache['always_send'] = False
         conf_cache['default_configs'] = {}
+        conf_cache['my_soldiers'] = []
         write_to_conf_cache(conf_cache_path)
 
 def write_to_conf_cache(conf_cache_path='conf.cache'):
@@ -692,6 +694,42 @@ def select_config_to_cancel_callback(updater, context):
     updater.message.reply_text(text="הוסר הסטטוס {}".format(updater.message.text), reply_markup=reply_markup)
     return ConversationHandler.END
 
+def my_soldiers_markup(context):
+    keyboard_temp = [[InlineKeyboardButton(soldier['firstName']+' '+soldier['lastName']+ (' ✅' if soldier['mi'] in conf_cache['my_soldiers'] else ''), callback_data=soldier['mi'])] for soldier in context.user_data['soldiers_list']]
+    keyboard_temp += [[InlineKeyboardButton('Done', callback_data='done')]]
+    temp_markup = InlineKeyboardMarkup(keyboard_temp)
+    return temp_markup
+
+@restricted
+def select_my_soldiers_callback(updater, context):
+    if not 'soldiers_list' in context.user_data:
+        update_soldiers_list(updater, context)
+
+    message = updater.message if updater.message is not None else updater.callback_query.message
+    message.reply_text(text='בחר את חייליך', reply_markup=my_soldiers_markup(context))
+    return PERSON_SELECT
+
+@restricted
+def toggle_soldier_mine(updater, context):
+    query = updater.callback_query
+    query.answer()
+    mi = query.data
+
+    if mi == 'done':
+        query.edit_message_text("Thanks.", None)
+        return ConversationHandler.END
+
+    mi = int(mi)
+    if mi in conf_cache['my_soldiers']:
+        conf_cache['my_soldiers'].remove(mi)
+    else:
+        conf_cache['my_soldiers'].append(mi)
+
+    write_to_conf_cache()
+    query.edit_message_reply_markup(my_soldiers_markup(context))
+    return PERSON_SELECT
+
+
 
 def divide_list_to_chunks(original_list, size):
     for i in range(0, len(original_list), size): 
@@ -722,6 +760,12 @@ def send_report(report, soldiers_list):
     
     if pre_placements == {}:
         pre_placements = None
+
+    soldiers_list = list(soldiers_list)
+    for soldier in soldiers_list:
+        if soldier['mi'] not in conf_cache['my_soldiers']:
+            soldiers_list.remove(soldier)
+
     return report.do_report_and_get_statuses(soldiers_list, pre_placements)
 
 
@@ -777,6 +821,17 @@ def main():
             CANCEL_SELECT: [MessageHandler(Filters.text("X"), cancel_callback), MessageHandler(None, select_config_to_cancel_callback),],
         },
         fallbacks=[],
+    ))
+
+    dp.add_handler(ConversationHandler(
+        entry_points=[MessageHandler(Filters.text(['בחר חיילים']), callback=select_my_soldiers_callback)],
+        states={
+            PERSON_SELECT: [
+                CallbackQueryHandler(toggle_soldier_mine),
+            ],
+
+        },
+        fallbacks=[MessageHandler(None, cancel_callback)]
     ))
 
     # log all errors
