@@ -343,13 +343,13 @@ def show_future_config_callback(updater, context):
         for soldier_mi, status in conf_cache['send_confs'][date].items():
             status_code = status[0]
             note = status[1]
-            text += '    {soldier_mi}: {status_code} {note}\n'.format(soldier_mi=soldiers[soldier_mi], status_code=possible_statuses[status_code][0], note=note)
+            text += '    {soldier_mi}: {status_code} {note}\n'.format(soldier_mi=soldiers.get(soldier_mi, '[חייל לא מוכר]'), status_code=possible_statuses[status_code][0], note=note)
 
     text += '\nסטטוסים דיפולטיביים:\n'    
     for soldier_mi, status in conf_cache['default_configs'].items():
         status_code = status[0]
         note = status[1]
-        text += '    {soldier_mi}: {status_code} {note}\n'.format(soldier_mi=soldiers[soldier_mi], status_code=possible_statuses[status_code][0], note=note)
+        text += '    {soldier_mi}: {status_code} {note}\n'.format(soldier_mi=soldiers.get(soldier_mi, '[חייל לא מוכר]'), status_code=possible_statuses[status_code][0], note=note)
 
     updater.message.reply_text(text=text)
 
@@ -638,7 +638,7 @@ def cancel_future_config_callback(updater, context):
         for soldier_mi, status in conf_cache['send_confs'][date].items():
             status_code = status[0]
             note = status[1]
-            option_text = '{date} - {soldier_mi} - {status} {note}'.format(date=date.strftime('%d.%m.%Y'), soldier_mi=soldiers[soldier_mi], status=possible_statuses[status_code][0], note=note).strip()
+            option_text = '{date} - {soldier_mi} - {status} {note}'.format(date=date.strftime('%d.%m.%Y'), soldier_mi=soldiers.get(soldier_mi, '[חייל לא מוכר]'), status=possible_statuses[status_code][0], note=note).strip()
             options[option_text] = (CANCEL_TYPE_SEND_CONFS, date, soldier_mi)
             keyboard_temp.append([KeyboardButton(option_text)])
 
@@ -646,7 +646,7 @@ def cancel_future_config_callback(updater, context):
     for soldier_mi, status in conf_cache['default_configs'].items():
         status_code = status[0]
         note = status[1]
-        option_text = 'תמיד - {soldier_mi} - {status_code} {note}'.format(soldier_mi=soldiers[soldier_mi], status_code=possible_statuses[status_code][0], note=note).strip()
+        option_text = 'תמיד - {soldier_mi} - {status_code} {note}'.format(soldier_mi=soldiers.get(soldier_mi, '[חייל לא מוכר]'), status_code=possible_statuses[status_code][0], note=note).strip()
         options[option_text] = (CANCEL_TYPE_DEFAULT_CONFIGS, soldier_mi)
         keyboard_temp.append([KeyboardButton(option_text)])
 
