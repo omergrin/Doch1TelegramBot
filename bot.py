@@ -204,12 +204,12 @@ def restricted(func):
     @wraps(func)
     def wrapped(updater, context, *args, **kwargs):
         if updater.message is not None:
-            chat_id = updater.message.chat.id
+            chat = updater.message.chat
         else:
-            chat_id = updater.callback_query.message.chat.id
-        if str(chat_id) != user_config['telegram_chat_id']:
-            print('Unauthorized access denied for chat {}.'.format(chat_id))
-            updater.bot.send_message(chat_id=user_config['telegram_chat_id'], text='Unauthorized access denied for chat {}.'.format(chat_id))
+            chat = updater.callback_query.message.chat
+        if str(chat.id) != user_config['telegram_chat_id']:
+            print('Unauthorized access denied for chat {}.'.format(chat.id))
+            updater.bot.send_message(chat_id=user_config['telegram_chat_id'], text="התקבלה הודעה מצ'אט {} (המשתמש {}), הגישה נדחתה.".format(chat.id, chat.username))
             return
         return func(updater, context, *args, **kwargs)
     return wrapped
@@ -229,7 +229,7 @@ def setup_one_identity_routine(*args):
         now = datetime.datetime.now()
         # check if time to send doch 1, if yes do, if no, sleep
         if can_send_now() and (now.date() in conf_cache['send_dates'] or conf_cache['always_send']):
-            updater.bot.send_message(chat_id=user_config['telegram_chat_id'], text='Auto sending today\'s report: {date}'.format(date=now.date()))
+            updater.bot.send_message(chat_id=user_config['telegram_chat_id'], text='שולח דו"ח 1 להיום: {date}'.format(date=now.date()))
             print('שולח בצורה אוטומטית את הדוח של היום: {date}'.format(date=now.date()))
             report = Doch1_Report(user_config)
             updater.bot.send_message(chat_id=user_config['telegram_chat_id'], text='משיג רשימת חיילים')
@@ -237,7 +237,7 @@ def setup_one_identity_routine(*args):
             if not res[0]:
                 updater.bot.send_message(chat_id=user_config['telegram_chat_id'], text=res[1])
             res = send_report(report, res[1])
-            updater.bot.send_message(chat_id=user_config['telegram_chat_id'], text='Sent report:\n{report}'.format(report=res))
+            updater.bot.send_message(chat_id=user_config['telegram_chat_id'], text='הדו"ח נשלח:\n{report}'.format(report=res))
         else:
             print('Waiting for next time to report')
         # calc time until 8:00 am and sleep
@@ -364,7 +364,7 @@ def send_today_report_callback(updater, context):
         context.user_data['soldiers_list'] = res[1]
         updater.message.reply_text(text='שולח')
         res = send_report(report, res[1])
-        updater.message.reply_text(text='Sent report:\n{report}'.format(report=res), reply_markup=reply_markup)
+        updater.message.reply_text(text='הדו"ח נשלח:\n{report}'.format(report=res), reply_markup=reply_markup)
     else:
         updater.message.reply_text(text='לא יכול לשלוח עכשיו, רק בין ראשון-חמישי בין השעות {start}-{end}'.format(start=START_TIME.strftime("%H:%M"), end=END_TIME.strftime("%H:%M")))
     delete_conf_cache_old_dates()
@@ -618,7 +618,7 @@ def cancel_future_config_callback(updater, context):
     """When the command /cancel_future_config is issued."""
     # If nothing to cancel
     if len(conf_cache['send_confs']) == 0 and (conf_cache['always_send'] or len(conf_cache['send_dates']) == 0) and len(conf_cache['default_configs']) == 0:
-        updater.message.reply_text(text="You idiot, you don't even have any future config set !", reply_markup=reply_markup)
+        updater.message.reply_text(text="יא מצחיק, לא קבעת שום סטטוס דיפולטיבי", reply_markup=reply_markup)
         return ConversationHandler.END
 
     if not 'soldiers_list' in context.user_data:
