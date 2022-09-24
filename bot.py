@@ -184,7 +184,7 @@ END_TIME = datetime.time(10, 30, 0)
 
 custom_keyboard = [
     [KeyboardButton('שלח דיווח')],
-    [KeyboardButton('הצג קונפיגורציה')],
+    [KeyboardButton('הצג קונפיגורציה'), KeyboardButton('עדכן רשימת חיילים')],
     [KeyboardButton('שנה דיווח אוטומטי'), KeyboardButton('שנה סטטוס עתידי')],
     [KeyboardButton('בטל סטטוס עתידי')]
 ]
@@ -304,6 +304,12 @@ def delete_conf_cache_old_dates():
         conf_cache['send_dates'].remove(date)
     
     write_to_conf_cache()
+
+def update_soldiers_list_callback(updater, context):
+    update_soldiers_list(updater, context)
+
+    message = updater.message if updater.message is not None else updater.callback_query.message
+    message.reply_text(text='רשימת החיילים עודכנה: \n' + ', '.join([s['firstName'] + ' ' + s['lastName'] for s in context.user_data['soldiers_list']]))
 
 def update_soldiers_list(updater, context):
     message = updater.message if updater.message is not None else updater.callback_query.message
@@ -735,6 +741,7 @@ def main():
     dp = updater.dispatcher
     
     dp.add_handler(MessageHandler(Filters.text(['שלח דיווח']), send_today_report_callback))
+    dp.add_handler(MessageHandler(Filters.text(['עדכן רשימת חיילים']), update_soldiers_list_callback))
     dp.add_handler(MessageHandler(Filters.text(['הצג קונפיגורציה']), show_future_config_callback))
 
     dp.add_handler(ConversationHandler(
