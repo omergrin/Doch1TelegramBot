@@ -474,7 +474,7 @@ def change_default_config_callback(updater, context):
 @restricted
 def select_future_config_date_callback(update, context):
     if update.callback_query is None:
-        calendar, _ = HebrewCalendar(min_date=datetime.date.today()).build()
+        calendar, _ = HebrewCalendar(min_date=datetime.date.today(), current_date=datetime.date.today()).build()
         update.message.reply_text('מאיזה תאריך?', reply_markup=calendar)
 
         context.user_data['change_future_config_date'] = None

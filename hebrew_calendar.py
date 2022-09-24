@@ -1,5 +1,5 @@
 import calendar
-from telegram_bot_calendar import DetailedTelegramCalendar
+from telegram_bot_calendar import DetailedTelegramCalendar, DAY
 
 class HebrewCalendar(DetailedTelegramCalendar):
     def __init__(self, calendar_id=0, current_date=None, additional_buttons=None, locale='he',
@@ -15,6 +15,7 @@ class HebrewCalendar(DetailedTelegramCalendar):
 
         self.months['he'] = ['יאנ', 'פבר', 'מרץ', 'אפר', 'מאי', 'יונ', 'יול', 'אוג', 'ספט', 'אוק', 'נוב', 'דצמ']
         self.days_of_week['he'] = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש']
+        self.first_step = DAY
 
     def _build_keyboard(self, buttons):
         if self.locale == 'he':
