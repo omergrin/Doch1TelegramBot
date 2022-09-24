@@ -5,7 +5,6 @@ import logging
 import json
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, RegexHandler, ConversationHandler, CallbackQueryHandler
 from telegram import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
-from telegram_bot_calendar import DetailedTelegramCalendar
 from telegram_bot_calendar.base import CB_CALENDAR
 from functools import wraps
 from collections import OrderedDict
@@ -16,9 +15,9 @@ import requests
 import re
 import os
 import pickle
-
 import datetime
 from report import Doch1_Report
+from hebrew_calendar import HebrewCalendar
 
 DATE_SELECT, PERSON_SELECT, STATUS_SELECT, NOTE_OUT_OF_BASE_SELECT, CANCEL_SELECT = range(1,6)
 CANCEL_TYPE_SEND_CONFS, CANCEL_TYPE_DEFAULT_CONFIGS, CANCEL_TYPE_SEND_DATE = range(1,4)
@@ -475,14 +474,14 @@ def change_default_config_callback(updater, context):
 @restricted
 def select_future_config_date_callback(update, context):
     if update.callback_query is None:
-        calendar, _ = DetailedTelegramCalendar(min_date=datetime.date.today()).build()
+        calendar, _ = HebrewCalendar(min_date=datetime.date.today(), current_date=datetime.date.today()).build()
         update.message.reply_text('מאיזה תאריך?', reply_markup=calendar)
 
         context.user_data['change_future_config_date'] = None
 
         return None
 
-    selected_date, calendar, _ = DetailedTelegramCalendar().process(update.callback_query.data)
+    selected_date, calendar, _ = HebrewCalendar().process(update.callback_query.data)
     if selected_date is None:
         update.callback_query.message.edit_reply_markup(calendar)
 
@@ -494,7 +493,7 @@ def select_future_config_date_callback(update, context):
     if context.user_data.get("change_future_config_date") is None:
         context.user_data['change_future_config_date'] = [selected_date]
 
-        calendar, _ = DetailedTelegramCalendar(min_date=selected_date).build()
+        calendar, _ = HebrewCalendar(min_date=selected_date).build()
         update.callback_query.message.reply_text('עד איזה תאריך?', reply_markup=calendar)
 
         return None
@@ -725,7 +724,7 @@ def main():
     initialize_user_config()
     
     initialize_conf_cache()
-    
+
     """Start the bot."""
     # Create the Updater and pass it your bot's token.
     # Make sure to set use_context=True to use the new context based callbacks
