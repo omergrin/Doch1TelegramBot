@@ -242,7 +242,7 @@ def setup_one_identity_routine(*args):
             print('Waiting for next time to report')
         # calc time until 8:00 am and sleep
         now = datetime.datetime.now()
-        time_to_sleep = (datetime.timedelta(hours=24) - (now-now.replace(hour=START_TIME.hour, minute=START_TIME.minute, second=START_TIME.second))).total_seconds() % (24 * 3600)
+        time_to_sleep = (datetime.timedelta(hours=24) - (now-now.replace(hour=START_TIME.hour, minute=START_TIME.minute, second=START_TIME.second))).total_seconds()
         print('Sleeping for {} hours'.format(time_to_sleep/60/60))
         time.sleep(time_to_sleep)
 
