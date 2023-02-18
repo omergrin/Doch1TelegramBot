@@ -193,6 +193,7 @@ remove_markup = ReplyKeyboardRemove()
 
 user_config = {}
 future_dates = {}
+report = {}
 
 # Enable logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -231,7 +232,6 @@ def setup_one_identity_routine(*args):
         if can_send_now() and (now.date() in conf_cache['send_dates'] or conf_cache['always_send']):
             updater.bot.send_message(chat_id=user_config['telegram_chat_id'], text='שולח דו"ח 1 להיום: {date}'.format(date=now.date()))
             print('שולח בצורה אוטומטית את הדוח של היום: {date}'.format(date=now.date()))
-            report = Doch1_Report(user_config)
             updater.bot.send_message(chat_id=user_config['telegram_chat_id'], text='משיג רשימת חיילים')
             res = report.login_and_get_soldiers()
             if not res[0]:
@@ -315,7 +315,6 @@ def update_soldiers_list(updater, context):
     message = updater.message if updater.message is not None else updater.callback_query.message
 
     message.reply_text(text='משיג רשימת חיילים')
-    report = Doch1_Report(user_config)
     res = report.login_and_get_soldiers()
     if not res[0]:
         message.reply_text(text=res[1], reply_markup=reply_markup)
@@ -361,7 +360,6 @@ def show_future_config_callback(updater, context):
 @restricted
 def send_today_report_callback(updater, context):
     """When the command /send_today_report is issued."""
-    report = Doch1_Report(user_config)
     if can_send_now():
         updater.message.reply_text(text='משיג רשימת חיילים')
         res = report.login_and_get_soldiers()
@@ -730,6 +728,10 @@ def main():
     initialize_user_config()
     
     initialize_conf_cache()
+
+    global report
+    report = Doch1_Report(user_config)
+    report.login()
 
     """Start the bot."""
     # Create the Updater and pass it your bot's token.
